@@ -49,6 +49,7 @@ Use vxm vmrun /? for help
 `,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
+		vmx = GetController()
 		fields := []string{"vmrun"}
 		if len(args) > 0 {
 			if len(args) == 1 && (args[0] == "help" || args[0] == "/?") {

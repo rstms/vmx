@@ -45,6 +45,7 @@ List VM instance data
 `,
 	Aliases: []string{"ls"},
 	Run: func(cmd *cobra.Command, args []string) {
+		vmx = GetController()
 		list, err := vmx.List("", viper.GetBool("long"), viper.GetBool("all"))
 		cobra.CheckErr(err)
 		fmt.Println(FormatJSON(list))

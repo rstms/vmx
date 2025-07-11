@@ -47,6 +47,7 @@ Pass any command line arguments to vmware
 `,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
+		vmx = GetController()
 		exitCode, olines, elines, err := vmx.Exec("vmware " + strings.Join(args, " "))
 		cobra.CheckErr(err)
 		if len(olines) > 0 {

@@ -52,9 +52,6 @@ var rootCmd = &cobra.Command{
 	Long: `
 Control VMWare Workstation instances
 `,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		vmx = GetController()
-	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		if vmx != nil {
 			err := vmx.Close()
