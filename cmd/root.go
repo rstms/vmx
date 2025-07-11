@@ -45,7 +45,7 @@ var cfgFile string
 var vmxctl workstation.Controller
 
 var rootCmd = &cobra.Command{
-	Version: "0.0.5",
+	Version: "0.0.1",
 	Use:     "vmx",
 	Short:   "control VMWare Workstation instances",
 	Long: `
