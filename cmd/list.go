@@ -36,20 +36,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+var listLong bool
+var listAll bool
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List VM instances",
+	Long: `
+List VM instance data.  Default is to list VM names. 
+The --long flag enables more detail
+The --all flag inludes non-running instances
+`,
+	Aliases: []string{"ls"},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(rootCmd.Name() + " version " + rootCmd.Version)
+		list, err := vmxctl.List("", listLong, listAll)
+		cobra.CheckErr(err)
+		fmt.Println(FormatJSON(list))
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(listCmd)
+	listCmd.PersistentFlags().BoolVarP(&listLong, "long", "l", false, "output VM detail")
+	listCmd.PersistentFlags().BoolVarP(&listAll, "all", "a", false, "include non-running instances")
 }

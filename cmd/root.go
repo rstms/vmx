@@ -31,31 +31,37 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
+	"log"
 	"os"
 
+	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"os/user"
 )
 
 var cfgFile string
+var vmxctl workstation.Controller
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: "0.0.1",
+	Version: "0.0.5",
 	Use:     "vmx",
-	Short:   "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short:   "control VMWare Workstation instances",
+	Long: `
+Control VMWare Workstation instances
+`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		vmxctl = GetController()
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if vmxctl != nil {
+			err := vmxctl.Close()
+			cobra.CheckErr(err)
+		}
+	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -65,15 +71,30 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(InitConfig)
-	OptionString("logfile", "l", "", "log filename")
+	hostname, err := os.Hostname()
+	cobra.CheckErr(err)
+	currentUser, err := user.Current()
+	cobra.CheckErr(err)
+	username := currentUser.Username
+	OptionString("logfile", "", "", "log filename")
 	OptionString("config", "c", "", "config file")
-	OptionSwitch("debug", "", "produce debug output")
-	OptionSwitch("verbose", "v", "increase verbosity")
+	OptionSwitch("debug", "d", "produce debug output")
+	OptionSwitch("verbose", "v", "produce diagnostic output")
+	OptionString("hostname", "H", hostname, "controller hostname")
+	OptionString("username", "U", username, "controller username")
+	OptionString("private-key", "i", "", "ssh private key file")
+	OptionString("api-username", "", username, "VMREST API Username")
+	OptionString("api-password", "", "", "VMREST API Password")
+	OptionString("port", "", fmt.Sprintf("%d", workstation.VMREST_PORT), "VMREST API Port")
+	OptionString("relay", "L", "", "ssh port forward VMREST port")
+	OptionString("url", "", "", "VMREST API URL")
+}
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
+func GetController() workstation.Controller {
+	c, err := workstation.NewController()
+	cobra.CheckErr(err)
+	if viper.GetBool("verbose") {
+		log.Printf("Controller: %s\n", FormatJSON(c))
+	}
+	return c
 }
