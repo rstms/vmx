@@ -59,14 +59,12 @@ Control VMWare Workstation instances
 		}
 	},
 }
-
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
 }
-
 func init() {
 	cobra.OnInitialize(InitConfig)
 	hostname, err := os.Hostname()
@@ -91,7 +89,6 @@ func init() {
 	OptionString("vmrun-pathame", "", "", "pathname to vmrun binary")
 	OptionString("vmware-pathame", "", "", "pathname to vmware binary")
 }
-
 func GetController() workstation.Controller {
 	c, err := workstation.NewController()
 	cobra.CheckErr(err)
