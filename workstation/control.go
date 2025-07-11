@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const Version = "0.0.2"
+
 type VID struct {
 	Id   string
 	Path string
@@ -79,7 +81,7 @@ type Controller interface {
 	Stop(string, StopOptions) error
 	Get(string, string) (any, error)
 	Set(string, string, any) error
-	Exec(string) ([]string, []string, error)
+	Exec(string) (int, []string, []string, error)
 	Close() error
 }
 
@@ -95,6 +97,7 @@ type vmctl struct {
 	Remote   string
 	debug    bool
 	verbose  bool
+	Version  string
 }
 
 func isLocal() (bool, error) {
@@ -134,7 +137,7 @@ func detectRemoteOS() (string, error) {
 
 func NewController() (Controller, error) {
 
-	_, keyfile, err := GetViperPath("key")
+	_, keyfile, err := GetViperPath("private_key")
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +149,7 @@ func NewController() (Controller, error) {
 		Path:     viper.GetString("path"),
 		verbose:  viper.GetBool("verbose"),
 		debug:    viper.GetBool("debug"),
+		Version:  Version,
 	}
 
 	relayConfig := viper.GetString("relay")
@@ -199,9 +203,12 @@ func (v *vmctl) List(name string, detail, all bool) ([]VM, error) {
 	runningVmxFiles := make(map[string]bool)
 
 	if !all {
-		olines, _, err := v.Exec("vmrun list")
+		code, olines, _, err := v.Exec("vmrun list")
 		if err != nil {
 			return vmList, err
+		}
+		if code != 0 {
+			return vmList, fmt.Errorf("vmrun list exited: %d", code)
 		}
 		for _, line := range olines {
 			if !strings.HasPrefix(line, "Total running VMs:") {
@@ -214,6 +221,8 @@ func (v *vmctl) List(name string, detail, all bool) ([]VM, error) {
 	if err != nil {
 		return vmList, err
 	}
+
+	log.Printf("runningVmxFiles: %+v\n", runningVmxFiles)
 
 	for _, vid := range vids {
 		log.Printf("vid: %+v\n", vid)
@@ -260,7 +269,7 @@ func (v *vmctl) Set(name, property string, value any) error {
 	return fmt.Errorf("Error: %s", "unimplemented")
 }
 
-func (v *vmctl) Exec(command string) ([]string, []string, error) {
+func (v *vmctl) Exec(command string) (int, []string, []string, error) {
 	switch v.Shell {
 	case "ssh":
 		args := []string{"-q", "-i", v.KeyFile, v.Username + "@" + v.Hostname}
@@ -274,10 +283,13 @@ func (v *vmctl) Exec(command string) ([]string, []string, error) {
 	case "cmd":
 		return v.shellExec([]string{"/c", command}, "")
 	}
-	return []string{}, []string{}, fmt.Errorf("unexpected shell: %s", v.Shell)
+	return 255, []string{}, []string{}, fmt.Errorf("unexpected shell: %s", v.Shell)
 }
 
-func (v *vmctl) shellExec(args []string, stdin string) ([]string, []string, error) {
+func (v *vmctl) shellExec(args []string, stdin string) (int, []string, []string, error) {
+	olines := []string{}
+	elines := []string{}
+	exitCode := 255
 	cmd := exec.Command(v.Shell, args...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -294,19 +306,28 @@ func (v *vmctl) shellExec(args []string, stdin string) ([]string, []string, erro
 	}
 	err := cmd.Run()
 	if err != nil {
-		return []string{}, []string{}, err
+		return exitCode, olines, elines, err
 	}
-	olines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	if v.debug {
-		for i, line := range olines {
-			log.Printf("stdout[%d] %s\n", i, line)
+	exitCode = cmd.ProcessState.ExitCode()
+	if v.verbose {
+		log.Printf("exit code: %d\n", exitCode)
+
+	}
+	ostr := strings.TrimSpace(stdout.String())
+	if ostr != "" {
+		olines = strings.Split(ostr, "\n")
+		if v.debug {
+			for i, line := range olines {
+				log.Printf("stdout[%d] %s\n", i, line)
+			}
 		}
 	}
-	elines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-	if v.debug {
+	estr := strings.TrimSpace(stderr.String())
+	if estr != "" {
+		elines = strings.Split(estr, "\n")
 		for i, line := range elines {
 			log.Printf("stderr[%d] %s\n", i, line)
 		}
 	}
-	return olines, elines, nil
+	return exitCode, olines, elines, nil
 }

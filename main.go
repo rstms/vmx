@@ -30,8 +30,14 @@ POSSIBILITY OF SUCH DAMAGE.
 */
 package main
 
-import "github.com/rstms/vmx/cmd"
+import (
+	"github.com/rstms/vmx/cmd"
+	"os"
+)
 
 func main() {
 	cmd.Execute()
+	if cmd.ExitCode != nil {
+		os.Exit(*cmd.ExitCode)
+	}
 }

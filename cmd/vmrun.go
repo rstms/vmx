@@ -32,25 +32,51 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"strings"
 )
 
-var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List VM instances",
+// vmrunCmd represents the vmrun command
+var vmrunCmd = &cobra.Command{
+	Use:   "vmrun",
+	Short: "execute the vmrun command on the host",
 	Long: `
-List VM instance data
+Execute the vmrun utility on the configured VMWare Workstation host
+Prefix command line arguments with '-T ws'
+Use vxm vmrun /? for help
 `,
-	Aliases: []string{"ls"},
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		list, err := vmx.List("", viper.GetBool("long"), viper.GetBool("all"))
+		fields := []string{"vmrun"}
+		if len(args) > 0 {
+			if len(args) == 1 && (args[0] == "help" || args[0] == "/?") {
+				fields = []string{"vmrun", "/?"}
+			} else {
+				fields = append([]string{"vmrun", "-T", "ws"}, args...)
+			}
+		}
+		exitCode, olines, elines, err := vmx.Exec(strings.Join(fields, " "))
 		cobra.CheckErr(err)
-		fmt.Println(FormatJSON(list))
+		fmt.Println(strings.Join(olines, "\n"))
+		if len(elines) > 0 {
+			log.Println(strings.Join(elines, "\n"))
+		}
+		ExitCode = &exitCode
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(vmrunCmd)
+
+	// Here you will define your flags and configuration settings.
+
+	// Cobra supports Persistent Flags which will work for this command
+	// and all subcommands, e.g.:
+	// vmrunCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	// Cobra supports local flags which will only run when this command
+	// is called directly, e.g.:
+	// vmrunCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

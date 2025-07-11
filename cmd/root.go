@@ -42,7 +42,8 @@ import (
 )
 
 var cfgFile string
-var vmxctl workstation.Controller
+var ExitCode *int
+var vmx workstation.Controller
 
 var rootCmd = &cobra.Command{
 	Version: "0.0.2",
@@ -52,11 +53,11 @@ var rootCmd = &cobra.Command{
 Control VMWare Workstation instances
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		vmxctl = GetController()
+		vmx = GetController()
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if vmxctl != nil {
-			err := vmxctl.Close()
+		if vmx != nil {
+			err := vmx.Close()
 			cobra.CheckErr(err)
 		}
 	},
@@ -79,6 +80,8 @@ func init() {
 	OptionString("logfile", "", "", "log filename")
 	OptionString("config", "c", "", "config file")
 	OptionSwitch("debug", "d", "produce debug output")
+	OptionSwitch("all", "a", "select all")
+	OptionSwitch("long", "l", "add output detail")
 	OptionSwitch("verbose", "v", "produce diagnostic output")
 	OptionString("hostname", "H", hostname, "controller hostname")
 	OptionString("username", "U", username, "controller username")

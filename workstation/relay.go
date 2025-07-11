@@ -20,6 +20,7 @@ const LISTEN_TIMEOUT = 5
 type Relay struct {
 	cmd     *exec.Cmd
 	verbose bool
+	debug   bool
 	wg      sync.WaitGroup
 }
 
@@ -48,6 +49,8 @@ func waitListener(host string, port int) error {
 }
 
 func NewRelay(forward string) (*Relay, error) {
+	debug := viper.GetBool("debug")
+	verbose := viper.GetBool("debug")
 	username := viper.GetString("username")
 	hostname := viper.GetString("hostname")
 	_, keyPath, err := GetViperPath("private_key")
@@ -55,9 +58,6 @@ func NewRelay(forward string) (*Relay, error) {
 		return nil, err
 	}
 	args := []string{}
-
-	debug := viper.GetBool("debug")
-	verbose := viper.GetBool("debug")
 
 	if debug {
 		args = append(args, "-v")
@@ -75,6 +75,7 @@ func NewRelay(forward string) (*Relay, error) {
 
 	r := Relay{
 		verbose: verbose,
+		debug:   debug,
 	}
 	r.cmd = exec.Command("ssh", args...)
 
@@ -85,17 +86,23 @@ func NewRelay(forward string) (*Relay, error) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
+		if verbose {
+			log.Println("ssh_relay: stderr reader started")
+			defer log.Println("ssh_relay: stderr reader exited")
+		}
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
-			log.Printf("ssh_relay: %s\n", line)
+			if debug {
+				log.Printf("ssh_relay: %s\n", line)
+			}
 		}
 		err := scanner.Err()
 		if err != nil {
 			log.Printf("ssh_relay: stderr reader failed: %v", err)
 		}
 	}()
-	if verbose {
+	if debug {
 		log.Printf("ssh_relay: command: %+v\n", r.cmd)
 	}
 
@@ -104,7 +111,7 @@ func NewRelay(forward string) (*Relay, error) {
 		return nil, err
 	}
 
-	if verbose {
+	if debug {
 		log.Printf("ssh_relay: started process: %+v\n", r.cmd.Process)
 	}
 
@@ -117,7 +124,7 @@ func NewRelay(forward string) (*Relay, error) {
 		return nil, fmt.Errorf("failed int conversion: %s", field)
 	}
 
-	if verbose {
+	if debug {
 		log.Println("ssh_relay: awaiting LISTEN...")
 	}
 	err = waitListener("localhost", port)
@@ -125,7 +132,7 @@ func NewRelay(forward string) (*Relay, error) {
 		return nil, err
 	}
 	if verbose {
-		log.Println("ssh_relay: listening")
+		log.Printf("ssh_relay: started process %d forwarding %s", r.cmd.Process.Pid, forward)
 	}
 	return &r, nil
 }

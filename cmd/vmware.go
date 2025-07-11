@@ -32,25 +32,43 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"strings"
 )
 
-var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List VM instances",
+var vmwareCmd = &cobra.Command{
+	Use:   "vmware",
+	Short: "execute the vmware command on the host",
 	Long: `
-List VM instance data
+Execute the vmware utility on the configured VMWare Workstation host
+Pass any command line arguments to vmware
 `,
-	Aliases: []string{"ls"},
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		list, err := vmx.List("", viper.GetBool("long"), viper.GetBool("all"))
+		exitCode, olines, elines, err := vmx.Exec("vmware " + strings.Join(args, " "))
 		cobra.CheckErr(err)
-		fmt.Println(FormatJSON(list))
+		if len(olines) > 0 {
+			fmt.Println(strings.Join(olines, "\n"))
+		}
+		if len(elines) > 0 {
+			fmt.Fprintln(os.Stderr, strings.Join(elines, "\n"))
+		}
+		ExitCode = &exitCode
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(vmwareCmd)
+
+	// Here you will define your flags and configuration settings.
+
+	// Cobra supports Persistent Flags which will work for this command
+	// and all subcommands, e.g.:
+	// vmrunCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	// Cobra supports local flags which will only run when this command
+	// is called directly, e.g.:
+	// vmrunCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
