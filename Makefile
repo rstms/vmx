@@ -41,6 +41,7 @@ release:
 clean:
 	rm -f $(program)
 	go clean
+	echo >/var/log/vmx
 
 sterile: clean
 	which $(program) && go clean -i || true

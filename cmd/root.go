@@ -91,6 +91,8 @@ func init() {
 	OptionString("port", "", fmt.Sprintf("%d", workstation.VMREST_PORT), "VMREST API Port")
 	OptionString("relay", "L", "", "ssh port forward VMREST port")
 	OptionString("url", "", "", "VMREST API URL")
+	OptionString("vmrun-pathame", "", "", "pathname to vmrun binary")
+	OptionString("vmware-pathame", "", "", "pathname to vmware binary")
 }
 
 func GetController() workstation.Controller {

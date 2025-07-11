@@ -50,7 +50,7 @@ func waitListener(host string, port int) error {
 
 func NewRelay(forward string) (*Relay, error) {
 	debug := viper.GetBool("debug")
-	verbose := viper.GetBool("debug")
+	verbose := viper.GetBool("verbose")
 	username := viper.GetString("username")
 	hostname := viper.GetString("hostname")
 	_, keyPath, err := GetViperPath("private_key")
@@ -86,7 +86,7 @@ func NewRelay(forward string) (*Relay, error) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		if verbose {
+		if debug {
 			log.Println("ssh_relay: stderr reader started")
 			defer log.Println("ssh_relay: stderr reader exited")
 		}
@@ -138,7 +138,7 @@ func NewRelay(forward string) (*Relay, error) {
 }
 
 func (r *Relay) Close() error {
-	if r.verbose {
+	if r.debug {
 		log.Printf("ssh_relay: stopping process %d\n", r.cmd.Process.Pid)
 	}
 	if runtime.GOOS == "windows" {
@@ -152,11 +152,11 @@ func (r *Relay) Close() error {
 			return err
 		}
 	}
-	if r.verbose {
+	if r.debug {
 		log.Println("ssh_relay: awaiting stderr reader...")
 	}
 	r.wg.Wait()
-	if r.verbose {
+	if r.debug {
 		log.Println("ssh_relay: awaiting process...")
 	}
 	_, err := r.cmd.Process.Wait()
