@@ -33,22 +33,40 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [VID]",
 	Short: "List VM instances",
 	Long: `
 List VM instance data
 `,
 	Aliases: []string{"ls"},
+	Args:    cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vmx = GetController()
-		list, err := vmx.List("", viper.GetBool("long"), viper.GetBool("all"))
+		InitController()
+		vid := ""
+		if len(args) > 0 {
+			vid = args[0]
+		}
+		options := workstation.ListOptions{
+			Detail:  viper.GetBool("long"),
+			Running: !viper.GetBool("all"),
+		}
+		vms, err := vmx.List(vid, options)
 		cobra.CheckErr(err)
-		fmt.Println(FormatJSON(list))
+		if options.Detail {
+			fmt.Println(FormatJSON(vms))
+		} else {
+			names := make([]string, len(vms))
+			for i, vm := range vms {
+				names[i] = vm.Name
+			}
+			fmt.Println(FormatJSON(names))
+		}
 	},
 }
 

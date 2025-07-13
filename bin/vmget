@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+curl \
+    -S \
+    -u 'mkrueger:UBmbD7h.-.tb'\
+    -H 'Content-Type=application/vnd.vmware.vmw.reset-v1+json'\
+    -H 'Accept=application/vnd.vmwarevmw.reset-v1+json'\
+    http://localhost:8697/api/${1}
+echo

@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,16 +19,19 @@ import (
 	"github.com/spf13/viper"
 )
 
-const VMREST_CONTENT_TYPE = "application/vnd.vmware.vmw.reset-v1+json"
+const VMREST_CONTENT_TYPE = "application/vnd.vmware.vmw.rest-v1+json"
 const VMREST_PORT = 8697
 
 type APIClient struct {
-	Client   *http.Client
-	URL      string
-	Headers  map[string]string
-	verbose  bool
-	debug    bool
-	vmxFiles map[string]string
+	Client  *http.Client
+	URL     string
+	Headers map[string]string
+	verbose bool
+	debug   bool
+
+	ByPath map[string]VID
+	ByName map[string]VID
+	ById   map[string]VID
 }
 
 func GetViperPath(key string) (bool, string, error) {
@@ -61,12 +65,12 @@ func newVMRestClient() (*APIClient, error) {
 	}
 
 	api := APIClient{
-		URL:      url,
-		Headers:  make(map[string]string),
-		verbose:  viper.GetBool("verbose"),
-		debug:    viper.GetBool("debug"),
-		vmxFiles: make(map[string]string),
+		URL:     url,
+		Headers: make(map[string]string),
+		verbose: viper.GetBool("verbose"),
+		debug:   viper.GetBool("debug"),
 	}
+	api.resetIndex()
 
 	api.Headers["Content-Type"] = VMREST_CONTENT_TYPE
 	api.Headers["Accept"] = VMREST_CONTENT_TYPE
@@ -129,6 +133,30 @@ func newVMRestClient() (*APIClient, error) {
 	return &api, nil
 }
 
+func FormatJSON(v any) (string, error) {
+	formatted, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed formatting JSON response: %v", err)
+	}
+	return string(formatted), nil
+}
+
+func logJSON(label string, v any) {
+	text, err := FormatJSON(v)
+	if err != nil {
+		log.Printf("logJSON: %v", err)
+		log.Printf("%s: %+v\n", label, v)
+	} else {
+		log.Printf("%s: %s\n", label, text)
+	}
+}
+
+func (a *APIClient) resetIndex() {
+	a.ByPath = make(map[string]VID)
+	a.ById = make(map[string]VID)
+	a.ByName = make(map[string]VID)
+}
+
 func (a *APIClient) Get(path string, response interface{}) (string, error) {
 	return a.request("GET", path, nil, response, nil)
 }
@@ -137,8 +165,8 @@ func (a *APIClient) Post(path string, request, response interface{}, headers *ma
 	return a.request("POST", path, request, response, headers)
 }
 
-func (a *APIClient) Put(path string, response interface{}) (string, error) {
-	return a.request("PUT", path, nil, response, nil)
+func (a *APIClient) Put(path string, request, response interface{}, headers *map[string]string) (string, error) {
+	return a.request("PUT", path, request, response, headers)
 }
 
 func (a *APIClient) Delete(path string, response interface{}) (string, error) {
@@ -207,22 +235,22 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 			log.Println("END-RESPONSE-BODY")
 		}
 	}
-	err = json.Unmarshal(body, responseData)
-	if err != nil {
-		return "", fmt.Errorf("failed decoding JSON response: %v", err)
+	var text string
+	if len(body) > 0 {
+		err = json.Unmarshal(body, responseData)
+		if err != nil {
+			return "", fmt.Errorf("failed decoding JSON response: %v", err)
+		}
+		t, err := FormatJSON(responseData)
+		if err != nil {
+			return "", err
+		}
+		text = t
 	}
-	if err != nil {
-		return "", err
-	}
-	var text []byte
-	text, err = json.MarshalIndent(responseData, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed formatting JSON response: %v", err)
-	}
-	return string(text), nil
+	return text, nil
 }
 
-// GET /vms, generate vmxFiles map, return slice of VIDS
+// GET /vms, generate index maps, return slice of VIDS
 func (a *APIClient) GetVIDs() ([]VID, error) {
 	path := "vms"
 	var response []VID
@@ -236,32 +264,99 @@ func (a *APIClient) GetVIDs() ([]VID, error) {
 		return []VID{}, fmt.Errorf("GET %s request failed: %v\n", path, err)
 	}
 
-	a.vmxFiles = make(map[string]string)
-	for _, vid := range response {
-		a.vmxFiles[vid.Id] = vid.Path
+	a.resetIndex()
+	vids := make([]VID, len(response))
+	for i, vid := range response {
+		path, err := PathNormalize(vid.Path)
+		if err != nil {
+			return []VID{}, err
+		}
+		vid.Path = path
+		name, err := PathToName(path)
+		if err != nil {
+			return []VID{}, err
+		}
+		vid.Name = name
+		a.ById[vid.Id] = vid
+		a.ByName[vid.Name] = vid
+		a.ByPath[vid.Path] = vid
+		vids[i] = vid
 	}
 	if a.verbose {
-		log.Printf("GetVIDs returning: %+v\n", response)
+		logJSON("GetVIDs returning: ", &vids)
 	}
-	return response, nil
+	return vids, nil
+}
+
+// search for a VM by Name or Id
+func (a *APIClient) IsVM(vid string) (bool, error) {
+	if len(a.ById) == 0 {
+		// refresh ID index
+		_, err := a.GetVIDs()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	_, ok := a.ById[vid]
+	if ok {
+		// vid is a valid VM ID
+		return true, nil
+	}
+
+	_, ok = a.ByName[vid]
+	if ok {
+		// vid is a valid VM Name
+		return true, nil
+	}
+	return false, nil
+}
+
+// return VM ID by Name or ID; error if neither is found
+func (a *APIClient) GetId(vid string) (string, error) {
+	ok, err := a.IsVM(vid)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		_, ok = a.ById[vid]
+		if ok {
+			// vid is a valid ID
+			return vid, nil
+		}
+
+		v, ok := a.ByName[vid]
+		if ok {
+			// vid is a valid name, return ID
+			return v.Id, nil
+		}
+		return "", fmt.Errorf("IsVM(%s) is true, but vid not in ById or ByName", vid)
+	}
+	return "", fmt.Errorf("VM not found: %s", vid)
+}
+
+func (a *APIClient) GetVM(vid string) (VM, error) {
+	id, err := a.GetId(vid)
+	if err != nil {
+		return VM{}, err
+	}
+	v, ok := a.ById[id]
+	if !ok {
+		return VM{}, fmt.Errorf("ByID index failed: vid=%s, id=%s", vid, id)
+	}
+	vm := VM{Name: v.Name, Id: v.Id, Path: v.Path}
+	return vm, nil
 }
 
 // GET /vms/ID, add CpuCount, RamSizeMb to VM
-func (a *APIClient) GetVM(vm *VM) error {
+func (a *APIClient) GetVMCpuRam(vm *VM) error {
 
-	vid := vm.Id
-	path := fmt.Sprintf("vms/%s", vid)
+	path := fmt.Sprintf("vms/%s", vm.Id)
 
-	var response struct {
-		cpu struct {
-			processors int
-		}
-		id     string
-		memory int
-	}
+	var response VmRestGetVmCpuRamResponse
 
 	if a.verbose {
-		log.Printf("GetVM(%s)\n", vid)
+		log.Printf("GetVMCpuRam: %s\n", path)
 	}
 
 	_, err := a.Get(path, &response)
@@ -269,53 +364,153 @@ func (a *APIClient) GetVM(vm *VM) error {
 		return fmt.Errorf("GET %s request failed: %v\n", path, err)
 	}
 
-	vm.CpuCount = response.cpu.processors
-	vm.RamSizeMb = response.memory
+	if a.verbose {
+		logJSON("VmRestGetVmCpuRam", &response)
+	}
+
+	vm.CpuCount = response.Cpu.Processors
+	vm.RamSizeMb = response.Memory
 
 	if a.verbose {
-		log.Printf("GetVM(%s) returning: %+v\n", vid, *vm)
+		logJSON("GetVMCpuRam returning", vm)
 	}
 
 	return nil
 }
 
-// call get/vms/ID/restrictions endpoint and add response data to VM
-func (a *APIClient) GetVMRestrictions(vm *VM) error {
-
-	vid := vm.Id
-	path := fmt.Sprintf("vms/%s/restrictions", vid)
-	/*
-		var response struct {
-			cpu struct {
-				processors int
-			}
-			id     string
-			memory int
-		}
-	*/
-
-	var response map[string]any
+// populate VM with configuration
+func (a *APIClient) GetConfig(vm *VM) error {
 
 	if a.verbose {
-		log.Printf("GetVMRestrictions(%s)\n", vid)
+		log.Printf("GetConfig(%s)\n", vm.Id)
 	}
 
-	text, err := a.Get(path, &response)
+	path := fmt.Sprintf("vms/%s/restrictions", vm.Id)
+
+	var response VmRestGetVmRestrictionsResponse
+	_, err := a.Get(path, &response)
 	if err != nil {
 		return fmt.Errorf("GET %s request failed: %v\n", path, err)
 	}
 
-	log.Printf("text: %s\n", text)
-	log.Printf("response: %+v\n", response)
-
-	/*
-		vm.CpuCount = response.cpu.processors
-		vm.RamSizeMb = response.memory
-	*/
-
 	if a.verbose {
-		log.Printf("GetVMRestrictions(%s) returning: %+v\n", vid, *vm)
+		logJSON("VmRestGetVmRestrictionsResponse", &response)
 	}
 
+	if vm.Id != response.ID {
+		return fmt.Errorf("response ID mismatch: expected=%s response=%s", vm.Id, response.ID)
+	}
+	vm.CpuCount = response.Cpu.Processors
+	vm.RamSizeMb = response.Memory
+	vm.IsoPath = ""
+	vm.IsoAttached = false
+	vm.IsoAttachOnStart = false
+	if len(response.CddvdList.Devices) > 0 {
+		captured := false
+		for _, device := range response.CddvdList.Devices {
+			path := device.DevicePath
+			if path != "" {
+				if !captured {
+					path, err = PathNormalize(path)
+					if err != nil {
+						return err
+					}
+					vm.IsoPath = path
+					vm.IsoAttached = response.CddvdList.Devices[0].ConnectionStatus == 1
+					vm.IsoAttachOnStart = response.CddvdList.Devices[0].StartConnected
+					captured = true
+				} else {
+					log.Printf("WARNING: CD/DVD device %d not captured: %v", device.Index, device)
+				}
+			}
+		}
+	}
+	vm.MacAddress = ""
+	if len(response.NicList.Nics) > 0 {
+		captured := false
+		for _, nic := range response.NicList.Nics {
+			if !captured {
+				vm.MacAddress = nic.MacAddress
+				captured = true
+			} else {
+				log.Printf("WARNING: NIC device %d not captured: %v", nic.Index, nic)
+			}
+		}
+	}
+	vm.SerialAttached = false
+	vm.SerialPath = ""
+	if len(response.SerialPortList.Devices) > 0 {
+		captured := false
+		for _, port := range response.SerialPortList.Devices {
+			if !captured {
+				vm.SerialAttached = true
+				vm.SerialPath = ""
+				captured = true
+			} else {
+				log.Printf("WARNING: serial port %d not captured: %v", port.Index, port)
+			}
+		}
+	}
+	vm.VncEnabled = response.RemoteVnc.VncEnabled
+	vm.VncPort = response.RemoteVnc.VncPort
+	vm.EnableCopy = !response.GuestIsolation.CopyDisabled
+	vm.EnablePaste = !response.GuestIsolation.PasteDisabled
+	vm.EnableDragAndDrop = !response.GuestIsolation.DndDisabled
+	vm.EnableFilesystemShare = !response.GuestIsolation.HgfsDisabled
+
+	if a.verbose {
+		logJSON("GetConfig returning", &vm)
+	}
+	return nil
+}
+
+func (a *APIClient) GetState(vm *VM) error {
+	err := a.GetPowerState(vm)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *APIClient) GetPowerState(vm *VM) error {
+	var response VmRestGetPowerStateResponse
+	path := fmt.Sprintf("vms/%s/power", vm.Id)
+	_, err := a.Get(path, &response)
+	if err != nil {
+		return fmt.Errorf("GET %s request failed: %v\n", path, err)
+	}
+	if a.verbose {
+		logJSON("VmRestGetPowerStateResponse", &response)
+	}
+	vm.PowerState = response.PowerState
+	vm.Running = vm.PowerState == "poweredOn"
+	return nil
+}
+
+func (a *APIClient) GetParam(vm *VM, name string) (string, error) {
+	var response map[string]any
+	path := fmt.Sprintf("vms/%s/params/%s", vm.Id, url.PathEscape(name))
+	text, err := a.Get(path, &response)
+	if err != nil {
+		return "", fmt.Errorf("GET %s request failed: %v\n", path, err)
+	}
+	log.Printf("text=%s\n", text)
+	log.Printf("response=%+v\n", response)
+	return text, nil
+}
+
+func (a *APIClient) SetParam(vm *VM, name, value string) error {
+	requestString := fmt.Sprintf("{\"name\":\"%s\",\"value\": \"%s\"}", name, value)
+	log.Printf("requestString: %s\n", requestString)
+	request := []byte(requestString)
+	var response map[string]any
+	path := fmt.Sprintf("vms/%s/params", vm.Id)
+	headers := map[string]string{"Accept": "text/plain"}
+	text, err := a.Put(path, &request, &response, &headers)
+	if err != nil {
+		return fmt.Errorf("PUT %s request failed: %v\n", path, err)
+	}
+	log.Printf("text=%s\n", text)
+	log.Printf("response=%+v\n", response)
 	return nil
 }

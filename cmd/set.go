@@ -31,22 +31,32 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
 var setCmd = &cobra.Command{
-	Use:   "set",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "set VID PROPERTY VALUE",
+	Short: "set VM instance property",
+	Long: `
+Set a named property on the VM instance identified by VID
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+VID may be an ID or the basename of the instance's VMX file
+
+The value is parsed as JSON, and the VM configuration or state is updated.
+
+Some properties are read-only, or read-only when the VM is running.
+Properties such as "power" can modify the running state of the VM
+`,
+	Args: cobra.ExactArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("set called")
+		InitController()
+		vid := args[0]
+		name := args[1]
+		value := args[2]
+		vm, err := vmx.Get(vid)
+		cobra.CheckErr(err)
+		err = vmx.SetProperty(vm.Id, name, value)
+		cobra.CheckErr(err)
 	},
 }
 

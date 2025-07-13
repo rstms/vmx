@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+config=~/.vmx/config.yaml
+
+viper_get() {
+    awk "/$1:/{print \$2}" <$config
+}
+
+package=workstation
+
+username=$USER
+password="$(viper_get api_password)"
+url="$(viper_get url)"
+
+devbox_id=FHUL1QMRMCM8PNOP60MEPBQQMK7U951E
+
+api_get() {
+    curl -s -L \
+    -u "$username:$password" \
+    -H 'Content-Type=application/vnd.vmware.vmw.reset-v1+json'\
+    -H 'Accept=application/vnd.vmwarevmw.reset-v1+json'\
+    $url/${1}
+}
+
+exclude_ids() {
+    grep -v B90JBTF8PD7K2CHG65KN15OH4GV5RHD6
+}
+
+vm_ids=$(api_get vms | jq -r '.[]|.id' | exclude_ids)
+
+get_all_restrictions() {
+    sep=""
+    echo "["
+    echo $id
+    for id in $vm_ids; do
+	echo $sep
+	api_get vms/$id/restrictions
+	sep=","
+    done
+    echo "]"
+}
+
+get_vm() {
+    id=$(echo $vm_ids | head -1)
+    api_get vms/$id
+}
+
+get_vms() {
+    api_get vms
+}
+
+set_package() {
+    sed "s/^package main/package $1/"
+}
+
+name_struct() {
+    sed "s/^type T\\(.*\\)/type $1\\1/"
+}
+
+show_ids() {
+    for id in $vm_ids; do
+	echo $id
+    done
+}
+
+slice_to_struct() {
+    sed 's/^type T \[\]struct/type T struct/'
+}
+
+add_name_field() {
+    awk '/^}/{printf("\tName string `json: \"name,omitzero\"`\n")}{print}'
+}
+
+get_power_state() {
+    api_get vms/$(show_ids | head -1)/power
+}
+
+get_ip_address() {
+    api_get vms/$devbox_id/ip
+}
+
+#rm $package/response_*.go
+#get_vms | gojsonstruct | set_package $package | name_struct VmRestGetVmsResponse | add_name_field  >$package/response_get_vms.go
+#get_vm | gojsonstruct | set_package $package | name_struct VmRestGetVmCpuRamResponse | tee $package/response_get_vm_cpu_ram.go
+#get_all_restrictions | gojsonstruct | slice_to_struct | set_package $package | name_struct VmRestGetVmRestrictionsResponse | tee $package/response_get_restrictions.go
+#get_power_state | gojsonstruct | set_package $package | name_struct VmRestGetPowerStateResponse | tee $package/response_get_power_state.go
+get_ip_address
+

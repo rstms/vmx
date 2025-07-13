@@ -43,6 +43,7 @@ import (
 
 var cfgFile string
 var ExitCode *int
+
 var vmx workstation.Controller
 
 var rootCmd = &cobra.Command{
@@ -59,6 +60,7 @@ Control VMWare Workstation instances
 		}
 	},
 }
+
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -77,6 +79,9 @@ func init() {
 	OptionSwitch("debug", "d", "produce debug output")
 	OptionSwitch("all", "a", "select all")
 	OptionSwitch("long", "l", "add output detail")
+	OptionSwitch("gui", "", "start in GUI mode")
+	OptionSwitch("fullscreen", "", "start in full-screen GUI mode")
+	OptionSwitch("wait", "", "wait for command to complete")
 	OptionSwitch("verbose", "v", "produce diagnostic output")
 	OptionString("hostname", "H", hostname, "controller hostname")
 	OptionString("username", "U", username, "controller username")
@@ -88,12 +93,16 @@ func init() {
 	OptionString("url", "", "", "VMREST API URL")
 	OptionString("vmrun-pathame", "", "", "pathname to vmrun binary")
 	OptionString("vmware-pathame", "", "", "pathname to vmware binary")
+	OptionString("timeout", "", "0", "timeout seconds (0==infininite)")
+	OptionString("remote-shell", "", "", "remote shell command")
+	OptionSwitch("poweroff", "", "BRS shutdown")
 }
-func GetController() workstation.Controller {
+
+func InitController() {
 	c, err := workstation.NewController()
 	cobra.CheckErr(err)
 	if viper.GetBool("verbose") {
 		log.Printf("Controller: %s\n", FormatJSON(c))
 	}
-	return c
+	vmx = c
 }

@@ -32,22 +32,103 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
 
 var editCmd = &cobra.Command{
-	Use:   "edit",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "edit VID",
+	Short: "edit vmx file of the selected instance",
+	Long: `
+Download the VMX file of the seleceted instance and open it in the system
+editor.  On save, upload the file to the host.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+The instance must be in the 'poweredOff' state.
+
+The original content of the file is saved in a backup file in the current
+directory.
+`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("edit called")
+		InitController()
+		vid := args[0]
+		vm, err := vmx.Get(vid)
+		cobra.CheckErr(err)
+
+		// verify VM is powered off
+		powerState, err := vmx.GetProperty(vm.Id, "power")
+		cobra.CheckErr(err)
+		if powerState != "poweredOff" {
+			err := fmt.Errorf("cannot edit in power state: %s", powerState)
+			cobra.CheckErr(err)
+		}
+
+		// read VMX data
+		vmxData, err := vmx.GetProperty(vm.Id, "vmx")
+		cobra.CheckErr(err)
+
+		// write data to edit file
+		vmxFile := fmt.Sprintf("%s.vmx", vm.Name)
+		err = os.WriteFile(vmxFile, []byte(vmxData), 0600)
+		cobra.CheckErr(err)
+
+		// write data to backup file
+		backupFile := backupFilename(vmxFile)
+		err = os.WriteFile(backupFile, []byte(vmxData), 0600)
+		cobra.CheckErr(err)
+
+		// edit file
+		var editCommand string
+		if runtime.GOOS == "windows" {
+			editCommand = "notepad"
+		} else {
+			editCommand = os.Getenv("VISUAL")
+			if editCommand == "" {
+				editCommand = os.Getenv("EDITOR")
+				if editCommand == "" {
+					editCommand = "vi"
+				}
+			}
+		}
+		editor := exec.Command(editCommand, vmxFile)
+		log.Printf("editor: %s\n", editor)
+		editor.Stdin = os.Stdin
+		editor.Stdout = os.Stdout
+		editor.Stderr = os.Stderr
+		err = editor.Run()
+		switch err.(type) {
+		case *exec.ExitError:
+			fmt.Fprintf(os.Stderr, "editor exited: %d, not uploading result\n", editor.ProcessState.ExitCode())
+			return
+		default:
+			cobra.CheckErr(err)
+		}
+		// upload result to host
+		editedData, err := os.ReadFile(vmxFile)
+		cobra.CheckErr(err)
+		if string(editedData) == string(vmxData) {
+			fmt.Println("no changes")
+		} else {
+			err = vmx.SetProperty(vm.Id, "vmx", string(editedData))
+			cobra.CheckErr(err)
+		}
 	},
+}
+
+func backupFilename(path string) string {
+	filename := path + ".bak"
+	count := 0
+	for {
+		if IsFile(filename) {
+			count += 1
+			filename = fmt.Sprintf("%s.bak.%d", path, count)
+		} else {
+			return filename
+		}
+	}
 }
 
 func init() {

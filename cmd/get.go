@@ -37,16 +37,25 @@ import (
 )
 
 var getCmd = &cobra.Command{
-	Use:   "get",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "get VM [PROPERTY]",
+	Short: "get instance detail",
+	Long: `
+By default, write selected instance VMX file to stdout.
+If a PROPERTY is specified, write the selected value as JSON.
+`,
+	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("get called")
+		InitController()
+		vid := args[0]
+		property := ""
+		if len(args) > 1 {
+			property = args[1]
+		}
+		vm, err := vmx.Get(vid)
+		cobra.CheckErr(err)
+		value, err := vmx.GetProperty(vm.Id, property)
+		cobra.CheckErr(err)
+		fmt.Println(value)
 	},
 }
 

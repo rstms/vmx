@@ -48,25 +48,26 @@ Use vxm vmrun /? for help
 `,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		vmx = GetController()
-		fields := []string{"vmrun"}
-		if len(args) > 0 {
-			if len(args) == 1 && (args[0] == "help" || args[0] == "/?") {
-				fields = []string{"vmrun", "/?"}
-			} else {
-				fields = append([]string{"vmrun", "-T", "ws"}, args...)
-			}
-		}
-		exitCode, olines, elines, err := vmx.Exec(strings.Join(fields, " "))
-		cobra.CheckErr(err)
-		fmt.Println(strings.Join(olines, "\n"))
-		if len(elines) > 0 {
-			log.Println(strings.Join(elines, "\n"))
-		}
-		ExitCode = &exitCode
+		InitController()
+		vmrun(strings.Join(args, " "))
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(vmrunCmd)
+}
+
+func vmrun(command string) {
+	switch command {
+	case "", "/?", "help":
+		command = "vmrun /?"
+	default:
+		command = "vmrun -T ws " + command
+	}
+	_, olines, elines, err := vmx.RemoteExec(command)
+	for _, line := range elines {
+		log.Println(line)
+	}
+	cobra.CheckErr(err)
+	fmt.Println(strings.Join(olines, "\n"))
 }

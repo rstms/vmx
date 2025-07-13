@@ -31,22 +31,29 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-var describeCmd = &cobra.Command{
-	Use: "show",
-	Short: "show instance detail",
-	Long: `
-Output instance configuration and state as JSON
+var killCmd = &cobra.Command{
+	Use:   "kill VID",
+	Short: "kill a VM instance",
+	Long: `Force stop a VM instance with a hard power off
 `,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("describe called")
+		InitController()
+		vid := args[0]
+		options := workstation.StopOptions{
+			Wait:     viper.GetBool("wait"),
+			PowerOff: true,
+		}
+		err := vmx.Stop(vid, options)
+		cobra.CheckErr(err)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(describeCmd)
+	rootCmd.AddCommand(killCmd)
 }

@@ -2,6 +2,7 @@ package workstation
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const Version = "0.0.5"
@@ -16,29 +18,44 @@ const Version = "0.0.5"
 type VID struct {
 	Id   string
 	Path string
+	Name string
+}
+
+type VMState struct {
+	Name       string
+	PowerState string
+	IpAddress  string
 }
 
 type VM struct {
-	VID
+	Id   string
+	Path string
 	Name string
-
-	Running   bool
-	IpAddress string
 
 	CpuCount   int
 	RamSizeMb  int
 	DiskSizeMb int
-	MacAddress string
 
-	IsoAttached bool
-	IsoPath     string
+	MacAddress string
+	IpAddress  string
+
+	IsoAttached      bool
+	IsoAttachOnStart bool
+	IsoPath          string
 
 	SerialAttached bool
 	SerialPath     string
 
 	VncEnabled bool
 	VncPort    int
-	VncAddress string
+
+	EnableCopy            bool
+	EnablePaste           bool
+	EnableDragAndDrop     bool
+	EnableFilesystemShare bool
+
+	Running    bool
+	PowerState string
 }
 
 type CreateOptions struct {
@@ -73,15 +90,22 @@ type StopOptions struct {
 	Wait     bool
 }
 
+type ListOptions struct {
+	Running bool
+	Detail  bool
+}
+
 type Controller interface {
-	List(string, bool, bool) ([]VM, error)
+	List(string, ListOptions) ([]VM, error)
 	Create(string, CreateOptions) (VM, error)
 	Destroy(string, DestroyOptions) error
 	Start(string, StartOptions) error
 	Stop(string, StopOptions) error
-	Get(string, string) (any, error)
-	Set(string, string, any) error
-	Exec(string) (int, []string, []string, error)
+	Get(string) (VM, error)
+	GetProperty(string, string) (string, error)
+	SetProperty(string, string, string) error
+	LocalExec(string) (int, []string, []string, error)
+	RemoteExec(string) (int, []string, []string, error)
 	Close() error
 }
 
@@ -198,45 +222,63 @@ func (v *vmctl) Close() error {
 	return nil
 }
 
-func (v *vmctl) List(name string, detail, all bool) ([]VM, error) {
-	vmList := []VM{}
-	runningVmxFiles := make(map[string]bool)
+func (v *vmctl) List(name string, options ListOptions) ([]VM, error) {
+	log.Printf("List: %s %+v\n", name, options)
 
-	if !all {
-		code, olines, _, err := v.Exec("vmrun list")
+	vids := []VID{}
+
+	if name == "" && options.Running {
+		// we only need the running vms, so spoof vids with only the Name using vmrun output
+		_, olines, _, err := v.RemoteExec("vmrun list")
 		if err != nil {
-			return vmList, err
-		}
-		if code != 0 {
-			return vmList, fmt.Errorf("vmrun list exited: %d", code)
+			return []VM{}, err
 		}
 		for _, line := range olines {
 			if !strings.HasPrefix(line, "Total running VMs:") {
-				runningVmxFiles[line] = true
+				runningName, err := PathToName(line)
+				if err != nil {
+					return []VM{}, err
+				}
+				vids = append(vids, VID{Name: runningName})
 			}
+		}
+	} else {
+		// set vids from API
+		v, err := v.api.GetVIDs()
+		if err != nil {
+			return []VM{}, err
+		}
+		vids = v
+	}
+
+	selected := []VID{}
+	for _, vid := range vids {
+		if name == "" || (strings.ToLower(name) == strings.ToLower(vid.Name)) {
+			selected = append(selected, vid)
 		}
 	}
 
-	vids, err := v.api.GetVIDs()
-	if err != nil {
-		return vmList, err
-	}
-
-	log.Printf("runningVmxFiles: %+v\n", runningVmxFiles)
-
-	for _, vid := range vids {
-		log.Printf("vid: %+v\n", vid)
-		/*
-			if all || vmxFiles[vid.VmxPath] {
-				vm, err := v.api.GetVM(&vmvmid.Id, vmid.VmxPath)
-				if err != nil {
-					return vmList, err
-				}
-				vmList = append(vmList, vm)
+	vms := make([]VM, len(selected))
+	for i, vid := range selected {
+		if options.Detail {
+			vm, err := v.api.GetVM(vid.Name)
+			if err != nil {
+				return []VM{}, err
 			}
-		*/
+			err = v.api.GetConfig(&vm)
+			if err != nil {
+				return []VM{}, err
+			}
+			err = v.api.GetState(&vm)
+			if err != nil {
+				return []VM{}, err
+			}
+			vms[i] = vm
+		} else {
+			vms[i] = VM{Name: vid.Name}
+		}
 	}
-	return vmList, nil
+	return vms, nil
 }
 
 func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
@@ -244,32 +286,309 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 	return VM{}, fmt.Errorf("Error: %s", "unimplemented")
 }
 
-func (v *vmctl) Destroy(name string, options DestroyOptions) error {
-	log.Printf("Destroy: %s %+v\n", name, options)
+func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
+	log.Printf("Destroy: %s %+v\n", vid, options)
 	return fmt.Errorf("Error: %s", "unimplemented")
 }
 
-func (v *vmctl) Start(name string, options StartOptions) error {
-	log.Printf("Start: %s %+v\n", name, options)
-	return fmt.Errorf("Error: %s", "unimplemented")
+func (v *vmctl) Start(vid string, options StartOptions) error {
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		fmt.Printf("Starting instance '%s'...\n", vm.Name)
+	}
+	err = v.api.GetPowerState(&vm)
+	if err != nil {
+		return err
+	}
+	if vm.PowerState == "poweredOn" {
+		log.Printf("ignoring start command for instance %s in power state %s", vm.Name, vm.PowerState)
+		if v.verbose {
+			fmt.Printf("Instance '%s' is already at power state '%s'\n", vm.Name, vm.PowerState)
+		}
+		return nil
+	}
+	path, err := PathFormat(v.Remote, vm.Path)
+	if err != nil {
+		return err
+	}
+	command := viper.GetString("remote_shell")
+	var visibility string
+	var stretch string
+	if options.FullScreen {
+		command += " -- vmware -n -q -X " + path
+		visibility = "fullscreen"
+		stretch = "TRUE"
+	} else if options.GUI {
+		command += " vmrun start " + path + " gui"
+		visibility = "windowed"
+		stretch = "FALSE"
+	} else {
+		command += " vmrun start " + path + " nogui"
+		visibility = "background"
+	}
+	if stretch != "" {
+		err := v.api.SetParam(&vm, "gui.EnableStretchGuest", stretch)
+		if err != nil {
+			return err
+		}
+	}
+	_, _, _, err = v.RemoteExec(command)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		fmt.Printf("Requested instance '%s' startup in %s mode\n", vm.Name, visibility)
+	}
+	if options.Wait {
+		err := v.WaitPowerState(vm.Id, "poweredOn")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (v *vmctl) Stop(name string, options StopOptions) error {
-	log.Printf("Stop: %s %+v\n", name, options)
-	return fmt.Errorf("Error: %s", "unimplemented")
+func (v *vmctl) validatePowerState(state string) error {
+	switch state {
+	case "poweredOn", "poweredOff", "paused", "suspended":
+		return nil
+	default:
+		return fmt.Errorf("unknown power state: %s", state)
+	}
 }
 
-func (v *vmctl) Get(name, property string) (any, error) {
-	log.Printf("Get: %s %+v\n", name, property)
-	return nil, fmt.Errorf("Error: %s", "unimplemented")
+func (v *vmctl) WaitPowerState(vid, state string) error {
+	log.Printf("WaitPowerState(%s, %s)\n", vid, state)
+	err := v.validatePowerState(state)
+	if err != nil {
+		return err
+	}
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		fmt.Printf("Awaiting instance '%s' power state %s...\n", vm.Name, state)
+	}
+	start := time.Now()
+	timeout_seconds := viper.GetInt64("timeout")
+	timeout := time.Duration(timeout_seconds) * time.Second
+	for {
+		err := v.api.GetPowerState(&vm)
+		if err != nil {
+			return err
+		}
+		if vm.PowerState == state {
+			fmt.Printf("Instance '%s' reached power state %s...\n", vm.Name, state)
+			return nil
+		}
+		if timeout_seconds != 0 {
+			if time.Since(start) > timeout {
+				return fmt.Errorf("timeout waiting for power state %s", state)
+			}
+		}
+		time.Sleep(1000 * time.Millisecond)
+	}
 }
 
-func (v *vmctl) Set(name, property string, value any) error {
-	log.Printf("Set: %s %s %+v\n", name, property, value)
-	return fmt.Errorf("Error: %s", "unimplemented")
+func (v *vmctl) Stop(vid string, options StopOptions) error {
+	log.Printf("Stop: %s %+v\n", vid, options)
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		fmt.Printf("Stopping instance '%s'...\n", vm.Name)
+	}
+	err = v.api.GetPowerState(&vm)
+	if err != nil {
+		return err
+	}
+	if vm.PowerState == "poweredOff" {
+		log.Printf("ignoring stop command for instance %s in power state %s\n", vm.Name, vm.PowerState)
+		if v.verbose {
+			fmt.Printf("Instance '%s' is already at power state '%s'\n", vm.Name, vm.PowerState)
+		}
+		return nil
+	}
+	path, err := PathFormat(v.Remote, vm.Path)
+	if err != nil {
+		return err
+	}
+	command := "vmrun stop " + path
+	_, _, _, err = v.RemoteExec(command)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		action := "shutdown"
+		if options.PowerOff {
+			action = "hard power down"
+		}
+		fmt.Printf("Requested %s on instance '%s'\n", action, vm.Name)
+	}
+	if options.Wait {
+		err := v.WaitPowerState(vm.Id, "poweredOff")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (v *vmctl) Exec(command string) (int, []string, []string, error) {
+func (v *vmctl) Get(vid string) (VM, error) {
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return VM{}, err
+	}
+	return vm, nil
+}
+
+func (v *vmctl) GetProperty(vid, property string) (string, error) {
+	if v.verbose {
+		log.Printf("Get: %s %+v\n", vid, property)
+	}
+	vm, err := v.Get(vid)
+	if err != nil {
+		return "", err
+	}
+
+	switch property {
+	case "vmx":
+		return v.GetFile(vm.Path)
+
+	case "power", "PowerState":
+		err := v.api.GetPowerState(&vm)
+		if err != nil {
+			return "", err
+		}
+		return vm.PowerState, nil
+
+	case "state", "status":
+		err := v.api.GetState(&vm)
+		if err != nil {
+			return "", err
+		}
+		state := VMState{
+			Name:       vm.Name,
+			PowerState: vm.PowerState,
+			IpAddress:  vm.IpAddress,
+		}
+		ret, err := FormatJSON(state)
+		if err != nil {
+			return "", err
+		}
+		return ret, nil
+	}
+
+	err = v.api.GetConfig(&vm)
+	if err != nil {
+		return "", err
+	}
+
+	switch property {
+	case "config":
+		ret, err := FormatJSON(&vm)
+		if err != nil {
+			return "", err
+		}
+		return ret, nil
+	case "all", "detail", "":
+		err = v.api.GetState(&vm)
+		if err != nil {
+			return "", err
+		}
+		ret, err := FormatJSON(&vm)
+		if err != nil {
+			return "", err
+		}
+		return ret, nil
+	}
+
+	data, err := FormatJSON(&vm)
+	if err != nil {
+		return "", err
+	}
+	var vmap map[string]any
+	err = json.Unmarshal([]byte(data), &vmap)
+	if err != nil {
+		return "", err
+	}
+	for key, value := range vmap {
+		if strings.ToLower(key) == strings.ToLower(property) {
+			ret, err := FormatJSON(value)
+			if err != nil {
+				return "", err
+			}
+			return ret, nil
+		}
+	}
+	value, err := v.api.GetParam(&vm, property)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func (v *vmctl) SetProperty(vid, property, value string) error {
+	log.Printf("SetProperty(%s, %s, %s)\n", vid, property, value)
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		fmt.Printf("[%s] setting %s=%s\n", vm.Name, property, value)
+	}
+	if property == "vmx" {
+		panic("unimplemented")
+	} else {
+		err = v.api.SetParam(&vm, property, value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *vmctl) GetFile(path string) (string, error) {
+	log.Printf("GetFile(%s)\n", path)
+	command := "cat"
+	if v.Remote == "windows" {
+		command = "type"
+	}
+	path, err := PathFormat(v.Remote, path)
+	if err != nil {
+		return "", err
+	}
+	_, olines, _, err := v.RemoteExec(command + " " + path)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(olines, "\n"), nil
+}
+
+func (v *vmctl) LocalExec(command string) (int, []string, []string, error) {
+	log.Printf("localExec('%s')\n", command)
+	var shell string
+	var args []string
+	if v.Local == "windows" {
+		shell = "cmd"
+		args = []string{"/c", command}
+	} else {
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+		args = []string{"-c", command}
+	}
+	return v.exec(shell, args, "")
+}
+
+func (v *vmctl) RemoteExec(command string) (int, []string, []string, error) {
+	log.Printf("RemoteExec('%s') shell=%s\n", command, v.Shell)
 	switch v.Shell {
 	case "ssh":
 		args := []string{"-q", "-i", v.KeyFile, v.Username + "@" + v.Hostname}
@@ -277,20 +596,21 @@ func (v *vmctl) Exec(command string) (int, []string, []string, error) {
 			args = append(args, command)
 			command = ""
 		}
-		return v.shellExec(args, command)
+		return v.exec(v.Shell, args, command)
 	case "sh":
-		return v.shellExec([]string{}, command)
+		return v.exec(v.Shell, []string{}, command)
 	case "cmd":
-		return v.shellExec([]string{"/c", command}, "")
+		return v.exec(v.Shell, []string{"/c", command}, "")
 	}
 	return 255, []string{}, []string{}, fmt.Errorf("unexpected shell: %s", v.Shell)
 }
 
-func (v *vmctl) shellExec(args []string, stdin string) (int, []string, []string, error) {
+func (v *vmctl) exec(command string, args []string, stdin string) (int, []string, []string, error) {
+	log.Printf("exec('%s', '%v') stdin='%s'\n", command, args, stdin)
 	olines := []string{}
 	elines := []string{}
-	exitCode := 255
-	cmd := exec.Command(v.Shell, args...)
+	exitCode := 0
+	cmd := exec.Command(command, args...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	if len(stdin) > 0 {
@@ -298,21 +618,16 @@ func (v *vmctl) shellExec(args []string, stdin string) (int, []string, []string,
 	}
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if v.debug {
-		log.Printf("cmd: %+v", cmd)
-		if len(stdin) > 0 {
-			log.Printf("stdin: '%s'\n", stdin)
-		}
-	}
 	err := cmd.Run()
+	switch err.(type) {
+	case *exec.ExitError:
+		exitCode = cmd.ProcessState.ExitCode()
+		err = nil
+	}
 	if err != nil {
-		return exitCode, olines, elines, err
+		return 1, olines, elines, err
 	}
-	exitCode = cmd.ProcessState.ExitCode()
-	if v.verbose {
-		log.Printf("exit code: %d\n", exitCode)
-
-	}
+	log.Printf("exit code: %d\n", exitCode)
 	ostr := strings.TrimSpace(stdout.String())
 	if ostr != "" {
 		olines = strings.Split(ostr, "\n")

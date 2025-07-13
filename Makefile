@@ -39,7 +39,7 @@ release:
 	gh release create v$(version) --notes "v$(version)"
 
 clean:
-	rm -f $(program)
+	rm -f $(program) *.core *.vmx.*
 	go clean
 	echo >/var/log/vmx
 

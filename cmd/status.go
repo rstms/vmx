@@ -31,33 +31,27 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/workstation"
+	"fmt"
+
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var stopCmd = &cobra.Command{
-	Use:   "stop VID",
-	Short: "stop a VM instance",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+var statusCmd = &cobra.Command{
+	Use:   "status VID",
+	Short: "show instance state",
+	Long: `
+Show the status of the selected instance.
+`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		options := workstation.StopOptions{
-			Wait:     viper.GetBool("wait"),
-			PowerOff: viper.GetBool("poweroff"),
-		}
-		err := vmx.Stop(vid, options)
+		status, err := vmx.GetProperty(vid, "status")
 		cobra.CheckErr(err)
+		fmt.Println(status)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(statusCmd)
 }
