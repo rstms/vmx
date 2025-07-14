@@ -50,7 +50,7 @@ to quickly create a Cobra application.`,
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     viper.GetBool("wait"),
+			Wait:     !viper.GetBool("no-wait"),
 			PowerOff: viper.GetBool("poweroff"),
 		}
 		err := vmx.Stop(vid, options)
@@ -60,4 +60,7 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(stopCmd)
+	OptionSwitch(stopCmd, "poweroff", "", "BRS operation (forced power down)")
+	OptionSwitch(stopCmd, "no-wait", "W", "exit after request")
+	OptionSwitch(stopCmd, "wait", "w", "wait for poweredOff state")
 }

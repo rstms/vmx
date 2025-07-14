@@ -1,4 +1,7 @@
 vmx
+vmx.exe
+*.vmx
+*.vmx.*
 notes
 cruft
 *.core

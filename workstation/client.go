@@ -235,6 +235,7 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 			log.Println("END-RESPONSE-BODY")
 		}
 	}
+
 	var text string
 	if len(body) > 0 {
 		err = json.Unmarshal(body, responseData)
@@ -247,6 +248,15 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 		}
 		text = t
 	}
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		var detail string
+		if len(body) > 0 {
+			detail = "\n" + string(body)
+		}
+		return "", fmt.Errorf("%s%s", response.Status, detail)
+	}
+
 	return text, nil
 }
 

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -80,7 +82,7 @@ type DestroyOptions struct {
 }
 
 type StartOptions struct {
-	GUI        bool
+	Background bool
 	FullScreen bool
 	Wait       bool
 }
@@ -95,6 +97,14 @@ type ListOptions struct {
 	Detail  bool
 }
 
+type QueryType int
+
+const (
+	QueryTypeConfig = iota
+	QueryTypeState
+	QueryTypeAll
+)
+
 type Controller interface {
 	List(string, ListOptions) ([]VM, error)
 	Create(string, CreateOptions) (VM, error)
@@ -106,6 +116,8 @@ type Controller interface {
 	SetProperty(string, string, string) error
 	LocalExec(string) (int, []string, []string, error)
 	RemoteExec(string) (int, []string, []string, error)
+	Upload(string, string, string) error
+	Download(string, string, string) error
 	Close() error
 }
 
@@ -124,6 +136,7 @@ type vmctl struct {
 	Version  string
 }
 
+// return true if VMWare Workstation Host is localhost
 func isLocal() (bool, error) {
 	remote := viper.GetString("hostname")
 	if remote == "" || remote == "localhost" || remote == "127.0.0.1" {
@@ -265,11 +278,7 @@ func (v *vmctl) List(name string, options ListOptions) ([]VM, error) {
 			if err != nil {
 				return []VM{}, err
 			}
-			err = v.api.GetConfig(&vm)
-			if err != nil {
-				return []VM{}, err
-			}
-			err = v.api.GetState(&vm)
+			err = v.queryVM(&vm, QueryTypeAll)
 			if err != nil {
 				return []VM{}, err
 			}
@@ -291,61 +300,114 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	return fmt.Errorf("Error: %s", "unimplemented")
 }
 
+func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
+	err := v.validatePowerState(state)
+	if err != nil {
+		return false, err
+	}
+	err = v.api.GetPowerState(vm)
+	if err != nil {
+		return false, err
+	}
+	if vm.PowerState == state {
+		log.Printf("[%s] ignoring %s in power state %s", vm.Name, command, vm.PowerState)
+		if v.verbose {
+			fmt.Printf("[%s] %s\n", vm.Name, vm.PowerState)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (v *vmctl) Start(vid string, options StartOptions) error {
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
 		return err
 	}
-	if v.verbose {
-		fmt.Printf("Starting instance '%s'...\n", vm.Name)
-	}
-	err = v.api.GetPowerState(&vm)
+	ok, err := v.checkPowerState(&vm, "start", "poweredOn")
 	if err != nil {
 		return err
 	}
-	if vm.PowerState == "poweredOn" {
-		log.Printf("ignoring start command for instance %s in power state %s", vm.Name, vm.PowerState)
-		if v.verbose {
-			fmt.Printf("Instance '%s' is already at power state '%s'\n", vm.Name, vm.PowerState)
-		}
+	if ok {
 		return nil
 	}
+
 	path, err := PathFormat(v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}
-	command := viper.GetString("remote_shell")
-	var visibility string
-	var stretch string
-	if options.FullScreen {
-		command += " -- vmware -n -q -X " + path
-		visibility = "fullscreen"
-		stretch = "TRUE"
-	} else if options.GUI {
-		command += " vmrun start " + path + " gui"
-		visibility = "windowed"
-		stretch = "FALSE"
-	} else {
-		command += " vmrun start " + path + " nogui"
-		visibility = "background"
+	fields := []string{}
+	remoteShell := viper.GetString("remote_shell")
+	if remoteShell != "" {
+		fields = append(fields, remoteShell, "--")
 	}
-	if stretch != "" {
-		err := v.api.SetParam(&vm, "gui.EnableStretchGuest", stretch)
-		if err != nil {
-			return err
+	var visibility string
+	if options.FullScreen {
+		if v.Remote == "windows" {
+			fields = append(fields, "start")
+		}
+		fields = append(fields, []string{"vmware", "-n", "-q", "-X", path}...)
+		visibility = "fullscreen"
+	} else {
+		// TODO: add '-vp password' to vmrun command for encrypted VMs
+		fields = append(fields, []string{"vmrun", "-T", "ws", "start", path}...)
+		if options.Background {
+			visibility = "background"
+			fields = append(fields, "nogui")
+		} else {
+			visibility = "windowed"
+			fields = append(fields, "gui")
 		}
 	}
+
+	err = v.setStretch(&vm)
+	if err != nil {
+		return err
+	}
+
+	if v.verbose {
+		fmt.Printf("[%s] requesting %s start...\n", vm.Name, visibility)
+	}
+
+	command := strings.Join(fields, " ")
 	_, _, _, err = v.RemoteExec(command)
 	if err != nil {
 		return err
 	}
 	if v.verbose {
-		fmt.Printf("Requested instance '%s' startup in %s mode\n", vm.Name, visibility)
+		fmt.Printf("[%s] start request complete\n", vm.Name)
 	}
+
 	if options.Wait {
 		err := v.WaitPowerState(vm.Id, "poweredOn")
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (v *vmctl) setStretch(vm *VM) error {
+	var stretch string
+	action := "unchanged"
+	if viper.GetBool("stretch") {
+		stretch = "TRUE"
+		action = "enabled"
+	}
+	if viper.GetBool("no_stretch") {
+		stretch = "FALSE"
+		action = "disabled"
+	}
+	if v.debug {
+		log.Printf("setStretch(%s) %s\n", vm.Name, action)
+	}
+	if stretch != "" {
+		err := v.api.SetParam(vm, "gui.EnableStretchGuest", stretch)
+		if err != nil {
+			return err
+		}
+		if v.verbose {
+			fmt.Printf("[%s] display stretch %s\n", vm.Name, action)
 		}
 	}
 	return nil
@@ -361,7 +423,9 @@ func (v *vmctl) validatePowerState(state string) error {
 }
 
 func (v *vmctl) WaitPowerState(vid, state string) error {
-	log.Printf("WaitPowerState(%s, %s)\n", vid, state)
+	if v.debug {
+		log.Printf("WaitPowerState(%s, %s)\n", vid, state)
+	}
 	err := v.validatePowerState(state)
 	if err != nil {
 		return err
@@ -371,7 +435,7 @@ func (v *vmctl) WaitPowerState(vid, state string) error {
 		return err
 	}
 	if v.verbose {
-		fmt.Printf("Awaiting instance '%s' power state %s...\n", vm.Name, state)
+		fmt.Printf("[%s] awaiting %s...\n", vm.Name, state)
 	}
 	start := time.Now()
 	timeout_seconds := viper.GetInt64("timeout")
@@ -382,12 +446,14 @@ func (v *vmctl) WaitPowerState(vid, state string) error {
 			return err
 		}
 		if vm.PowerState == state {
-			fmt.Printf("Instance '%s' reached power state %s...\n", vm.Name, state)
+			if v.verbose {
+				fmt.Printf("[%s] %s\n", vm.Name, state)
+			}
 			return nil
 		}
 		if timeout_seconds != 0 {
 			if time.Since(start) > timeout {
-				return fmt.Errorf("timeout waiting for power state %s", state)
+				return fmt.Errorf("[%s] timed out awaiting power state %s", vm.Name, state)
 			}
 		}
 		time.Sleep(1000 * time.Millisecond)
@@ -395,40 +461,40 @@ func (v *vmctl) WaitPowerState(vid, state string) error {
 }
 
 func (v *vmctl) Stop(vid string, options StopOptions) error {
-	log.Printf("Stop: %s %+v\n", vid, options)
+	if v.debug {
+		log.Printf("Stop(%s, %+v)\n", vid, options)
+	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
 		return err
 	}
-	if v.verbose {
-		fmt.Printf("Stopping instance '%s'...\n", vm.Name)
-	}
-	err = v.api.GetPowerState(&vm)
+
+	ok, err := v.checkPowerState(&vm, "stop", "poweredOff")
 	if err != nil {
 		return err
 	}
-	if vm.PowerState == "poweredOff" {
-		log.Printf("ignoring stop command for instance %s in power state %s\n", vm.Name, vm.PowerState)
-		if v.verbose {
-			fmt.Printf("Instance '%s' is already at power state '%s'\n", vm.Name, vm.PowerState)
-		}
+	if ok {
 		return nil
 	}
 	path, err := PathFormat(v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}
-	command := "vmrun stop " + path
+	// FIXME: may need -vp PASSWORD here for encrypted instances
+	command := "vmrun -T ws stop " + path
+	action := "shutdown"
+	if options.PowerOff {
+		action = "forced power down"
+	}
+	if v.verbose {
+		fmt.Printf("[%s] requesting %s...\n", vm.Name, action)
+	}
 	_, _, _, err = v.RemoteExec(command)
 	if err != nil {
 		return err
 	}
 	if v.verbose {
-		action := "shutdown"
-		if options.PowerOff {
-			action = "hard power down"
-		}
-		fmt.Printf("Requested %s on instance '%s'\n", action, vm.Name)
+		fmt.Printf("[%s] %s request complete\n", vm.Name, action)
 	}
 	if options.Wait {
 		err := v.WaitPowerState(vm.Id, "poweredOff")
@@ -449,7 +515,7 @@ func (v *vmctl) Get(vid string) (VM, error) {
 
 func (v *vmctl) GetProperty(vid, property string) (string, error) {
 	if v.verbose {
-		log.Printf("Get: %s %+v\n", vid, property)
+		log.Printf("GetProperty(%s, %s)\n", vid, property)
 	}
 	vm, err := v.Get(vid)
 	if err != nil {
@@ -458,7 +524,11 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 
 	switch property {
 	case "vmx":
-		return v.GetFile(vm.Path)
+		data, err := v.ReadFile(&vm, vm.Name+".vmx")
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
 
 	case "power", "PowerState":
 		err := v.api.GetPowerState(&vm)
@@ -467,8 +537,19 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		}
 		return vm.PowerState, nil
 
+	case "IpAddress":
+		err = v.getIpAddress(&vm)
+		if err != nil {
+			return "", err
+		}
+		return vm.IpAddress, nil
+
 	case "state", "status":
 		err := v.api.GetState(&vm)
+		if err != nil {
+			return "", err
+		}
+		err = v.getIpAddress(&vm)
 		if err != nil {
 			return "", err
 		}
@@ -484,20 +565,19 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return ret, nil
 	}
 
-	err = v.api.GetConfig(&vm)
-	if err != nil {
-		return "", err
-	}
-
 	switch property {
 	case "config":
+		err = v.queryVM(&vm, QueryTypeConfig)
+		if err != nil {
+			return "", err
+		}
 		ret, err := FormatJSON(&vm)
 		if err != nil {
 			return "", err
 		}
 		return ret, nil
 	case "all", "detail", "":
-		err = v.api.GetState(&vm)
+		err := v.queryVM(&vm, QueryTypeAll)
 		if err != nil {
 			return "", err
 		}
@@ -508,29 +588,82 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return ret, nil
 	}
 
-	data, err := FormatJSON(&vm)
+	// try property as a VM key
+	value, ok, err := v.queryVMProperty(&vm, property)
 	if err != nil {
 		return "", err
 	}
-	var vmap map[string]any
-	err = json.Unmarshal([]byte(data), &vmap)
-	if err != nil {
-		return "", err
+	if ok {
+		return value, nil
 	}
-	for key, value := range vmap {
-		if strings.ToLower(key) == strings.ToLower(property) {
-			ret, err := FormatJSON(value)
-			if err != nil {
-				return "", err
-			}
-			return ret, nil
-		}
-	}
-	value, err := v.api.GetParam(&vm, property)
+
+	// try property as a VMX key
+	value, err = v.api.GetParam(&vm, property)
 	if err != nil {
 		return "", err
 	}
 	return value, nil
+}
+
+func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
+	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
+		err := v.api.GetConfig(vm)
+		if err != nil {
+			return err
+		}
+	}
+	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
+		err := v.api.GetState(vm)
+		if err != nil {
+			return err
+		}
+		err = v.getIpAddress(vm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *vmctl) mapVM(vm *VM) (map[string]string, error) {
+	var vmap map[string]string
+	data, err := FormatJSON(vm)
+	if err != nil {
+		return vmap, err
+	}
+	err = json.Unmarshal([]byte(data), &vmap)
+	if err != nil {
+		return vmap, err
+	}
+	return vmap, nil
+}
+
+func (v *vmctl) queryVMProperty(vm *VM, property string) (string, bool, error) {
+
+	// create map of empty VM to check if property exists
+	vmap, err := v.mapVM(&VM{})
+	if err != nil {
+		return "", false, err
+	}
+
+	_, ok := vmap[property]
+	if !ok {
+		return "", false, nil
+	}
+
+	err = v.queryVM(vm, QueryTypeAll)
+	if err != nil {
+		return "", false, err
+	}
+
+	// create map of populated VM to return value
+	vmap, err = v.mapVM(vm)
+	if err != nil {
+		return "", false, err
+	}
+
+	value, ok := vmap[property]
+	return value, ok, nil
 }
 
 func (v *vmctl) SetProperty(vid, property, value string) error {
@@ -543,8 +676,10 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 		fmt.Printf("[%s] setting %s=%s\n", vm.Name, property, value)
 	}
 	if property == "vmx" {
-		panic("unimplemented")
+		return v.WriteFile(&vm, vm.Name+".vmx", []byte(value))
 	} else {
+            // FIXME: handle setting VM property keys
+
 		err = v.api.SetParam(&vm, property, value)
 		if err != nil {
 			return err
@@ -553,21 +688,165 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 	return nil
 }
 
-func (v *vmctl) GetFile(path string) (string, error) {
-	log.Printf("GetFile(%s)\n", path)
-	command := "cat"
-	if v.Remote == "windows" {
-		command = "type"
+func (v *vmctl) ReadFile(vm *VM, filename string) (string, error) {
+	if v.debug {
+		log.Printf("ReadFile(%s, %s)\n", vm.Name, filename)
 	}
-	path, err := PathFormat(v.Remote, path)
+	tempFile, err := os.CreateTemp("", "vmx_read.*")
 	if err != nil {
 		return "", err
 	}
-	_, olines, _, err := v.RemoteExec(command + " " + path)
+	localPath := tempFile.Name()
+	err = tempFile.Close()
 	if err != nil {
 		return "", err
 	}
-	return strings.Join(olines, "\n"), nil
+	defer os.Remove(localPath)
+
+	err = v.DownloadFile(vm, localPath, filename)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (v *vmctl) WriteFile(vm *VM, filename string, data []byte) error {
+	if v.debug {
+		log.Printf("WriteFile(%s, %s, (%d bytes))\n", vm.Name, filename, len(data))
+	}
+	tempFile, err := os.CreateTemp("", "vmx_write.*")
+	if err != nil {
+		return err
+	}
+	localPath := tempFile.Name()
+	err = tempFile.Close()
+	if err != nil {
+		return err
+	}
+	defer os.Remove(localPath)
+	err = os.WriteFile(localPath, data, 0600)
+	if err != nil {
+		return err
+	}
+	err = v.UploadFile(vm, localPath, filename)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *vmctl) copyFile(dstPath, srcPath string) error {
+	if v.debug {
+		log.Printf("copyFile(%s, %s)\n", dstPath, srcPath)
+	}
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	_, err = io.Copy(dst, src)
+	return err
+
+}
+
+func (v *vmctl) Download(vid, localPath, filename string) error {
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	return v.DownloadFile(&vm, localPath, filename)
+}
+
+func (v *vmctl) DownloadFile(vm *VM, localPath, filename string) error {
+	if v.debug {
+		log.Printf("DownloadFile(%s, %s, %s)\n", vm.Name, localPath, filename)
+	}
+
+	hostDir, _ := filepath.Split(vm.Path)
+	hostPath := filepath.Join(hostDir, filename)
+
+	local, err := isLocal()
+	if err != nil {
+
+		return err
+	}
+	if local {
+		hostPath, err := PathFormat(v.Local, hostPath)
+		if err != nil {
+			return err
+		}
+		return v.copyFile(localPath, hostPath)
+	}
+
+	path, err := PathFormat(v.Remote, hostPath)
+	if err != nil {
+		return err
+	}
+	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, path)
+	args := []string{"-i", v.KeyFile, remoteSource, localPath}
+	_, _, _, err = v.exec("scp", args, "")
+	return err
+}
+
+func (v *vmctl) Upload(vid, localPath, filename string) error {
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return err
+	}
+	return v.UploadFile(&vm, localPath, filename)
+}
+
+func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
+	if v.debug {
+		log.Printf("UploadFile(%s, %s, %s)\n", vm.Name, localPath, filename)
+	}
+	hostDir, _ := filepath.Split(vm.Path)
+	hostPath := filepath.Join(hostDir, filename)
+	local, err := isLocal()
+	if err != nil {
+		return err
+	}
+	if local {
+		hostPath, err := PathFormat(v.Local, hostPath)
+		if err != nil {
+			return err
+		}
+		return v.copyFile(hostPath, localPath)
+	}
+
+	path, err := PathFormat(v.Remote, hostPath)
+	if err != nil {
+		return err
+	}
+	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, path)
+	args := []string{"-i", v.KeyFile, localPath, remoteTarget}
+	_, _, _, err = v.exec("scp", args, "")
+	return err
+}
+
+func (v *vmctl) getIpAddress(vm *VM) error {
+	path, err := PathFormat(v.Remote, vm.Path)
+	if err != nil {
+		return err
+	}
+	_, olines, _, err := v.RemoteExec("vmrun getGuestIpAddress " + path)
+	if err != nil {
+		return err
+	}
+	if len(olines) > 0 {
+		vm.IpAddress = olines[0]
+	}
+	return nil
 }
 
 func (v *vmctl) LocalExec(command string) (int, []string, []string, error) {

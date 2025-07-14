@@ -35,10 +35,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
+
+const MAX_BACKUP_FILES = 10
 
 var editCmd = &cobra.Command{
 	Use:   "edit VID",
@@ -58,6 +62,16 @@ directory.
 		vm, err := vmx.Get(vid)
 		cobra.CheckErr(err)
 
+		backupDir := viper.GetString("backup_dir")
+		if backupDir == "" {
+			backupDir = filepath.Join(".", "backup")
+		}
+		log.Printf("backupDir=%s\n", backupDir)
+		if !IsDir(backupDir) {
+			err := os.MkdirAll(backupDir, 0700)
+			cobra.CheckErr(err)
+		}
+
 		// verify VM is powered off
 		powerState, err := vmx.GetProperty(vm.Id, "power")
 		cobra.CheckErr(err)
@@ -69,16 +83,20 @@ directory.
 		// read VMX data
 		vmxData, err := vmx.GetProperty(vm.Id, "vmx")
 		cobra.CheckErr(err)
+		log.Printf("read vmxData: %d bytes\n", len(vmxData))
 
 		// write data to edit file
-		vmxFile := fmt.Sprintf("%s.vmx", vm.Name)
+		vmxFile := filepath.Join(backupDir, fmt.Sprintf("%s.vmx", vm.Name))
 		err = os.WriteFile(vmxFile, []byte(vmxData), 0600)
 		cobra.CheckErr(err)
+		log.Printf("wrote vmxFile: %s\n", vmxFile)
 
 		// write data to backup file
-		backupFile := backupFilename(vmxFile)
+		backupFile, err := backupFilename(vmxFile)
+		cobra.CheckErr(err)
 		err = os.WriteFile(backupFile, []byte(vmxData), 0600)
 		cobra.CheckErr(err)
+		log.Printf("wrote backupFile: %s\n", backupFile)
 
 		// edit file
 		var editCommand string
@@ -106,9 +124,11 @@ directory.
 		default:
 			cobra.CheckErr(err)
 		}
+		log.Printf("editor exited %d\n", editor.ProcessState.ExitCode())
 		// upload result to host
 		editedData, err := os.ReadFile(vmxFile)
 		cobra.CheckErr(err)
+		log.Printf("read editedData: %d bytes\n", len(editedData))
 		if string(editedData) == string(vmxData) {
 			fmt.Println("no changes")
 		} else {
@@ -118,15 +138,20 @@ directory.
 	},
 }
 
-func backupFilename(path string) string {
-	filename := path + ".bak"
+func backupFilename(pathname string) (string, error) {
+	dir, name := filepath.Split(pathname)
+	backupName := name + ".bak"
 	count := 0
 	for {
-		if IsFile(filename) {
-			count += 1
-			filename = fmt.Sprintf("%s.bak.%d", path, count)
-		} else {
-			return filename
+		pathname = filepath.Join(dir, backupName)
+		log.Printf("checking pathname: %s\n", pathname)
+		if !IsFile(pathname) {
+			return pathname, nil
+		}
+		backupName = fmt.Sprintf("%s.bak~%02d", name, count)
+		count += 1
+		if count > MAX_BACKUP_FILES {
+			return "", fmt.Errorf("overflow generating unique backup filename in: %s\n", dir)
 		}
 	}
 }

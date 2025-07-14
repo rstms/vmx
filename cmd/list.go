@@ -72,4 +72,6 @@ List VM instance data
 
 func init() {
 	rootCmd.AddCommand(listCmd)
+	OptionSwitch(listCmd, "all", "a", "select all")
+	OptionSwitch(listCmd, "long", "l", "add output detail")
 }

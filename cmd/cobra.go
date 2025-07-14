@@ -18,26 +18,44 @@ func ViperKey(name string) string {
 	return ViperPrefix + strings.ReplaceAll(name, "-", "_")
 }
 
-func OptionSwitch(name, flag, description string) {
+func OptionSwitch(cmd *cobra.Command, name, flag, description string) {
 
-	if flag == "" {
-		rootCmd.PersistentFlags().Bool(name, false, description)
+	if cmd == rootCmd {
+		if flag == "" {
+			rootCmd.PersistentFlags().Bool(name, false, description)
+		} else {
+			rootCmd.PersistentFlags().BoolP(name, flag, false, description)
+		}
+		viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
 	} else {
-		rootCmd.PersistentFlags().BoolP(name, flag, false, description)
+		if flag == "" {
+			cmd.Flags().Bool(name, false, description)
+		} else {
+			cmd.Flags().BoolP(name, flag, false, description)
+		}
+		viper.BindPFlag(ViperKey(name), cmd.Flags().Lookup(name))
 	}
-
-	viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
 }
 
-func OptionString(name, flag, defaultValue, description string) {
+func OptionString(cmd *cobra.Command, name, flag, defaultValue, description string) {
 
-	if flag == "" {
-		rootCmd.PersistentFlags().String(name, defaultValue, description)
+	if cmd == rootCmd {
+		if flag == "" {
+			rootCmd.PersistentFlags().String(name, defaultValue, description)
+		} else {
+			rootCmd.PersistentFlags().StringP(name, flag, defaultValue, description)
+		}
+
+		viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
 	} else {
-		rootCmd.PersistentFlags().StringP(name, flag, defaultValue, description)
-	}
+		if flag == "" {
+			cmd.Flags().String(name, defaultValue, description)
+		} else {
+			cmd.Flags().StringP(name, flag, defaultValue, description)
+		}
 
-	viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
+		viper.BindPFlag(ViperKey(name), cmd.Flags().Lookup(name))
+	}
 }
 
 func OpenLog() {

@@ -46,7 +46,7 @@ var killCmd = &cobra.Command{
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     viper.GetBool("wait"),
+			Wait:     !viper.GetBool("no_wait"),
 			PowerOff: true,
 		}
 		err := vmx.Stop(vid, options)
@@ -56,4 +56,6 @@ var killCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(killCmd)
+	OptionSwitch(killCmd, "wait", "w", "wait for poweredOff state")
+	OptionSwitch(killCmd, "no-wait", "W", "exit after request")
 }

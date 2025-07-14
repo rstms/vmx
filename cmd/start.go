@@ -50,9 +50,9 @@ to quickly create a Cobra application.`,
 		InitController()
 		vid := args[0]
 		options := workstation.StartOptions{
-			GUI:        viper.GetBool("gui"),
+			Background: viper.GetBool("background"),
 			FullScreen: viper.GetBool("fullscreen"),
-			Wait:       viper.GetBool("wait"),
+			Wait:       !viper.GetBool("no_wait"),
 		}
 		err := vmx.Start(vid, options)
 		cobra.CheckErr(err)
@@ -61,4 +61,10 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(startCmd)
+	OptionSwitch(startCmd, "stretch", "", "enable stretched display")
+	OptionSwitch(startCmd, "no-stretch", "", "disable stretched display")
+	OptionSwitch(startCmd, "background", "", "start in background mode")
+	OptionSwitch(startCmd, "fullscreen", "", "start in full-screen mode")
+	OptionSwitch(startCmd, "no-wait", "W", "exit after request")
+	OptionSwitch(startCmd, "wait", "w", "wait for poweredOn state")
 }
