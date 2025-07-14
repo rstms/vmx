@@ -47,7 +47,7 @@ var ExitCode *int
 var vmx workstation.Controller
 
 var rootCmd = &cobra.Command{
-	Version: "0.0.7",
+	Version: "0.0.8",
 	Use:     "vmx",
 	Short:   "control VMWare Workstation instances",
 	Long: `
