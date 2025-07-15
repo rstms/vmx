@@ -44,13 +44,19 @@ var listCmd = &cobra.Command{
 	Long: `
 List VM instance data
 `,
-	Aliases: []string{"ls"},
+	Aliases: []string{"ls", "ps"},
 	Args:    cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := ""
 		if len(args) > 0 {
 			vid = args[0]
+			if viper.GetBool("files") {
+				files, err := vmx.ListFiles(vid)
+				cobra.CheckErr(err)
+				fmt.Println(FormatJSON(files))
+				return
+			}
 		}
 		options := workstation.ListOptions{
 			Detail:  viper.GetBool("long"),
@@ -74,4 +80,5 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	OptionSwitch(listCmd, "all", "a", "select all")
 	OptionSwitch(listCmd, "long", "l", "add output detail")
+	OptionSwitch(listCmd, "files", "", "list files")
 }

@@ -32,7 +32,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"strings"
@@ -48,15 +47,11 @@ Pass any command line arguments to vmware
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
-		exitCode, olines, elines, err := vmx.RemoteExec("vmware " + strings.Join(args, " "))
+		lines, err := vmx.RemoteExec("vmware "+strings.Join(args, " "), nil)
 		cobra.CheckErr(err)
-		if len(olines) > 0 {
-			fmt.Println(strings.Join(olines, "\n"))
+		if len(lines) > 0 {
+			fmt.Println(strings.Join(lines, "\n"))
 		}
-		if len(elines) > 0 {
-			fmt.Fprintln(os.Stderr, strings.Join(elines, "\n"))
-		}
-		ExitCode = &exitCode
 	},
 }
 

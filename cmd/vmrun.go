@@ -56,7 +56,6 @@ Use vxm vmrun /? for help
 func init() {
 	rootCmd.AddCommand(vmrunCmd)
 }
-
 func vmrun(command string) {
 	switch command {
 	case "", "/?", "help":
@@ -64,10 +63,10 @@ func vmrun(command string) {
 	default:
 		command = "vmrun -T ws " + command
 	}
-	_, olines, elines, err := vmx.RemoteExec(command)
-	for _, line := range elines {
+	lines, err := vmx.RemoteExec(command, nil)
+	for _, line := range lines {
 		log.Println(line)
 	}
 	cobra.CheckErr(err)
-	fmt.Println(strings.Join(olines, "\n"))
+	fmt.Println(strings.Join(lines, "\n"))
 }

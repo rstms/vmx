@@ -51,9 +51,9 @@ func waitListener(host string, port int) error {
 func NewRelay(forward string) (*Relay, error) {
 	debug := viper.GetBool("debug")
 	verbose := viper.GetBool("verbose")
-	username := viper.GetString("username")
-	hostname := viper.GetString("hostname")
-	_, keyPath, err := GetViperPath("private_key")
+	username := viper.GetString("user")
+	hostname := viper.GetString("host")
+	_, keyPath, err := GetViperPath("ssh_key")
 	if err != nil {
 		return nil, err
 	}

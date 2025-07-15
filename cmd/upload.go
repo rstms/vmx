@@ -31,22 +31,32 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+	"path/filepath"
 )
 
 var uploadCmd = &cobra.Command{
-	Use:   "upload",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "upload LOCAL_FILE VID [HOST_FILENAME]",
+	Short: "copy a file to the VMWare directory",
+	Long: `
+Copy a LOCAL_FILE to the host VMWare directory of the selected instance.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+LOCAL_FILE may be a pathname or a filename.  If HOST_FILENAME is not provided
+the filename of LOCAL_FILE will used as HOST_FILENAME.
+`,
+	Args: cobra.RangeArgs(2, 3),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("upload called")
+		InitController()
+
+		localPathname := args[0]
+		vid := args[1]
+
+		_, hostFilename := filepath.Split(localPathname)
+		if len(args) > 2 {
+			hostFilename = args[2]
+		}
+		err := vmx.Upload(vid, localPathname, hostFilename)
+		cobra.CheckErr(err)
 	},
 }
 

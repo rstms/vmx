@@ -79,3 +79,24 @@ func TestPathCompare(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, ok)
 }
+
+func TestFileListUnix(t *testing.T) {
+	initTestConfig(t)
+	viper.Set("debug", true)
+	viper.Set("verbose", true)
+	viper.Set("relay", "")
+	viper.Set("hostname", "localhost")
+	v, err := NewController()
+	require.Nil(t, err)
+	vmx := v.(*vmctl)
+	require.IsType(t, &vmctl{}, vmx)
+	_, lines, _, err := vmx.Exec("sh", []string{"-c", "ls -l ."}, "")
+	files, err := ParseFileList("unix", lines)
+	require.Nil(t, err)
+	require.NotEmpty(t, files)
+	for _, file := range files {
+		require.IsType(t, VMFile{}, file)
+		log.Printf("%v\n", file)
+	}
+
+}

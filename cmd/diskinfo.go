@@ -31,60 +31,26 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"log"
-	"os"
-	"os/user"
-
-	"github.com/rstms/vmx/workstation"
+	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var cfgFile string
-var ExitCode *int
-
-var vmx workstation.Controller
-
-var rootCmd = &cobra.Command{
-	Version: "0.0.8",
-	Use:     "vmx",
-	Short:   "control VMWare Workstation instances",
+var diskinfoCmd = &cobra.Command{
+	Use:   "diskinfo VID",
+	Short: "output virtual disk detail",
 	Long: `
-Control VMWare Workstation instances
+Read the VMX file of the selected instance, then read and decode the 
+VMDK file.  Output the disk details in JSON format
 `,
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if vmx != nil {
-			err := vmx.Close()
-			cobra.CheckErr(err)
-		}
+	Run: func(cmd *cobra.Command, args []string) {
+		InitController()
+		vid := args[0]
+		disks, err := vmx.GetProperty(vid, "disks")
+		cobra.CheckErr(err)
+		fmt.Println(disks)
 	},
 }
 
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
-}
 func init() {
-	cobra.OnInitialize(InitConfig)
-	OptionString(rootCmd, "logfile", "", "", "log filename")
-	OptionString(rootCmd, "config", "c", "", "config file")
-	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
-	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
-	hostname, err := os.Hostname()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
-	user, err := user.Current()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "user", "", user.Username, "workstation user")
-	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
-}
-func InitController() {
-	c, err := workstation.NewController()
-	cobra.CheckErr(err)
-	if viper.GetBool("verbose") {
-		log.Printf("Controller: %s\n", FormatJSON(c))
-	}
-	vmx = c
+	rootCmd.AddCommand(diskinfoCmd)
 }

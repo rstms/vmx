@@ -32,30 +32,55 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var getCmd = &cobra.Command{
-	Use:   "get VM [PROPERTY]",
+	Use:   "get VM [PROPERTY] [PREFIX]",
 	Short: "get instance detail",
 	Long: `
-By default, write selected instance VMX file to stdout.
-If a PROPERTY is specified, write the selected value as JSON.
+By default, write the VM instance config and state as JSON.  A PROPERTY may
+be specified to select other output values.
+
+A PROPERTY can be a VM Object property key, a VMX config value, or one of the
+following labels:
+
+config ---- instance configuration 
+state ----- instate state
+power ----- power state
+ip -------- IP address
+vmx ------- vmx file content
+
+PREFIX may be provided with the 'vmx' property to filter the vmx file output
 `,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(1, 3),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		property := ""
+		var property string
+		var prefix string
 		if len(args) > 1 {
 			property = args[1]
 		}
-		vm, err := vmx.Get(vid)
+		if strings.ToLower(property) == "vmx" {
+			property = "vmx"
+			if len(args) > 2 {
+				prefix = strings.ToLower(args[2])
+			}
+		}
+		value, err := vmx.GetProperty(vid, property)
 		cobra.CheckErr(err)
-		value, err := vmx.GetProperty(vm.Id, property)
-		cobra.CheckErr(err)
-		fmt.Println(value)
+		if prefix != "" {
+			for _, line := range strings.Split(value, "\n") {
+				if strings.HasPrefix(strings.ToLower(line), prefix) {
+					fmt.Println(line)
+				}
+			}
+		} else {
+			fmt.Println(value)
+		}
 	},
 }
 

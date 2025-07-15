@@ -31,60 +31,47 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"log"
-	"os"
-	"os/user"
-
-	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"path/filepath"
 )
 
-var cfgFile string
-var ExitCode *int
-
-var vmx workstation.Controller
-
-var rootCmd = &cobra.Command{
-	Version: "0.0.8",
-	Use:     "vmx",
-	Short:   "control VMWare Workstation instances",
+var downloadCmd = &cobra.Command{
+	Use:   "download VID HOST_FILENAME [TARGET]",
+	Short: "copy a file from the VMWare directory",
 	Long: `
-Control VMWare Workstation instances
+Copy the HOST_FILENAME from the VMWare directory of the selected instance to
+TARGET.  
+
+If the configured Workstation host is remote, transfer the file using 'scp'
+
+TARGET may be a filename with or without a path, a directory.  The default
+target is '.'  
+
+If TARGET is a directory, the output file will be written to 
+TARGET/HOST_FILENAME
 `,
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if vmx != nil {
-			err := vmx.Close()
-			cobra.CheckErr(err)
+	Args: cobra.RangeArgs(2, 3),
+	Run: func(cmd *cobra.Command, args []string) {
+		InitController()
+
+		vid := args[0]
+
+		hostFile := args[1]
+
+		target := "."
+		if len(args) > 2 {
+			target = args[2]
 		}
+
+		if IsDir(target) {
+			target = filepath.Join(target, hostFile)
+		}
+
+		err := vmx.Download(vid, target, hostFile)
+		cobra.CheckErr(err)
 	},
 }
 
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
-}
 func init() {
-	cobra.OnInitialize(InitConfig)
-	OptionString(rootCmd, "logfile", "", "", "log filename")
-	OptionString(rootCmd, "config", "c", "", "config file")
-	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
-	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
-	hostname, err := os.Hostname()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
-	user, err := user.Current()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "user", "", user.Username, "workstation user")
-	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
-}
-func InitController() {
-	c, err := workstation.NewController()
-	cobra.CheckErr(err)
-	if viper.GetBool("verbose") {
-		log.Printf("Controller: %s\n", FormatJSON(c))
-	}
-	vmx = c
+	rootCmd.AddCommand(downloadCmd)
 }
