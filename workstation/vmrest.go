@@ -178,7 +178,7 @@ func (r *VMRestClient) GetVMCpuRam(vm *VM) error {
 	}
 
 	vm.CpuCount = response.Cpu.Processors
-	vm.RamSizeMb = response.Memory
+	vm.RamSize = FormatSize(int64(response.Memory) * MB)
 
 	if r.verbose {
 		LogJSON("GetVMCpuRam returning", vm)
@@ -210,7 +210,7 @@ func (r *VMRestClient) GetConfig(vm *VM) error {
 		return fmt.Errorf("response ID mismatch: expected=%s response=%s", vm.Id, response.ID)
 	}
 	vm.CpuCount = response.Cpu.Processors
-	vm.RamSizeMb = response.Memory
+	vm.RamSize = FormatSize(int64(response.Memory) * MB)
 	vm.IsoPath = ""
 	vm.IsoAttached = false
 	vm.IsoAttachOnStart = false
@@ -305,7 +305,7 @@ func (r *VMRestClient) GetParam(vm *VM, name string) (string, error) {
 	}
 	log.Printf("text=%s\n", text)
 	log.Printf("response=%+v\n", response)
-	return text, nil
+	return fmt.Sprintf("%v", response["value"]), nil
 }
 
 func (r *VMRestClient) SetParam(vm *VM, name, value string) error {

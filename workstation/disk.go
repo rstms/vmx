@@ -41,8 +41,20 @@ type VMDisk struct {
 	Device     string
 	File       string
 	Capacity   int64
-	SizeMB     int
+	Size       string
 	Descriptor map[string]any
+}
+
+func ParseDiskType(singleFile, preallocated bool) VDiskType {
+	switch {
+	case singleFile && preallocated:
+		return DiskTypeSingleFilePreallocated
+	case singleFile:
+		return DiskTypeSingleFileGrowable
+	case preallocated:
+		return DiskTypeMultiFilePreallocated
+	}
+	return DiskTypeMultiFileGrowable
 }
 
 // search lines of a VMX file returning map of device[vmxfile], true_if_found
@@ -97,7 +109,7 @@ func (d *VMDisk) parseVMDK(data []byte) error {
 	log.Printf("descriptorData: %s\n", string(descriptorData))
 
 	d.Capacity = descriptor.Capacity()
-	d.SizeMB = int(d.Capacity / int64(1024*1024))
+	d.Size = FormatSize(d.Capacity)
 
 	return nil
 }

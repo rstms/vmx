@@ -90,7 +90,7 @@ func TestFileListUnix(t *testing.T) {
 	require.Nil(t, err)
 	vmx := v.(*vmctl)
 	require.IsType(t, &vmctl{}, vmx)
-	_, lines, _, err := vmx.Exec("sh", []string{"-c", "ls -l ."}, "")
+	lines, err := vmx.exec("sh", []string{"-c", "ls -l ."}, "", nil)
 	files, err := ParseFileList("unix", lines)
 	require.Nil(t, err)
 	require.NotEmpty(t, files)

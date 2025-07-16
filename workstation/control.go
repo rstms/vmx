@@ -18,7 +18,6 @@ import (
 
 const Version = "0.0.9"
 
-var MB int64 = 1024 * 1024
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
 
 type VID struct {
@@ -43,9 +42,9 @@ type VM struct {
 	Path string
 	Name string
 
-	CpuCount   int
-	RamSizeMb  int
-	DiskSizeMb int
+	CpuCount int
+	RamSize  string
+	DiskSize string
 
 	MacAddress string
 	IpAddress  string
@@ -69,11 +68,35 @@ type VM struct {
 	PowerState string
 }
 
+/*
+func (v *VM) String() string {
+	data, err := json.MarshalIndent(v)
+	if err != nil {
+		log.Fatalf("VM Marshal failed: %v", err)
+	}
+	var vmap map[string]any
+	err = json.Unmarshal(data, &vmap)
+	if err != nil {
+		log.Fatalf("VM Unmarshal failed: %v", err)
+	}
+
+	vmap["RamSize"] = FormatSize(v.RamSize)
+	vmap["DiskSize"] = FormatSize(v.DiskSize)
+
+	data, err := json.Marshal(&vmap)
+	if err != nil {
+		log.Fatalf("VM Marshal failed: %v", err)
+	}
+	return string(data)
+}
+*/
+
 type CreateOptions struct {
 	CpuCount          int
-	MemorySize        int64
-	DiskType          VDiskType
-	DiskSize          int64
+	MemorySize        string
+	DiskSize          string
+	DiskPreallocated  bool
+	DiskSingleFile    bool
 	EFIBoot           bool
 	HostTimeSync      bool
 	GuestTimeZone     string
@@ -81,7 +104,7 @@ type CreateOptions struct {
 	EnableClipboard   bool
 	MacAddress        string
 	IsoSource         string
-	soAttached        bool
+	IsoAttached       bool
 	Start             *StartOptions
 }
 
@@ -637,7 +660,7 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 			return "", fmt.Errorf("[%s] no disks found", vm.Name)
 		}
 		if property == "disksize" || property == "disksizemb" {
-			return fmt.Sprintf("%v", vm.DiskSizeMb), nil
+			return fmt.Sprintf("%v", vm.DiskSize), nil
 		}
 		if property == "diskcapacity" {
 			return fmt.Sprintf("%v", disks[0].Capacity), nil
@@ -752,7 +775,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 
 func (v *vmctl) mapVMKeys() error {
 	if v.debug {
-		log.Println("mapVMkeys()\n")
+		log.Println("mapVMkeys()")
 	}
 	vmap, err := v.toMap(&VM{})
 	if err != nil {
@@ -1036,7 +1059,7 @@ func (v *vmctl) getDisks(vm *VM) ([]VMDisk, bool, error) {
 			return disks, false, err
 		}
 		if !found {
-			vm.DiskSizeMb = disk.SizeMB
+			vm.DiskSize = disk.Size
 		}
 		found = true
 		disks = append(disks, *disk)

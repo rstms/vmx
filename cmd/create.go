@@ -32,24 +32,62 @@ package cmd
 
 import (
 	"fmt"
-
+	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "create NAME",
+	Short: "generate new VM instance",
+	Long: `
+Create the named VM instance on the host.  Generate a VMDK virtual disk in
+the instance subdirectory.  Default instance creation parameters are used 
+unless specified with option flags.
+`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("create called")
+		InitController()
+		name := args[0]
+
+		options := workstation.CreateOptions{
+			CpuCount:          viper.GetInt("cpu"),
+			MemorySize:        viper.GetString("ram"),
+			DiskSize:          viper.GetString("disk"),
+			DiskPreallocated:  viper.GetBool("preallocate"),
+			DiskSingleFile:    viper.GetBool("single_file"),
+			EFIBoot:           viper.GetBool("efi"),
+			HostTimeSync:      viper.GetBool("time_sync"),
+			GuestTimeZone:     viper.GetString("timezone"),
+			EnableDragAndDrop: viper.GetBool("drag_and_drop"),
+			EnableClipboard:   viper.GetBool("clipboard"),
+			MacAddress:        viper.GetString("mac"),
+			IsoSource:         viper.GetString("iso"),
+			IsoAttached:       !viper.GetBool("detach"),
+		}
+		vm, err := vmx.Create(name, options)
+		cobra.CheckErr(err)
+		if viper.GetBool("verbose") {
+			fmt.Println(vm)
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(createCmd)
+	OptionString(createCmd, "cpu", "", "1", "cpu count")
+	OptionString(createCmd, "ram", "", "2G", "memory size")
+	OptionString(createCmd, "disk", "", "16G", "disk size")
+	OptionString(createCmd, "timezone", "", "UTC", "guest time zone")
+	OptionString(createCmd, "mac", "", "", "MAC address")
+	OptionString(createCmd, "iso", "", "", "boot ISO pathname or URL")
+	OptionSwitch(createCmd, "detach", "", "detach ISO")
+	OptionSwitch(createCmd, "efi", "", "EFI boot")
+	OptionSwitch(createCmd, "time-sync", "", "sync time with host")
+	OptionSwitch(createCmd, "drag-and-drop", "", "enable drag-and-drop")
+	OptionSwitch(createCmd, "clipboard", "", "enable clipboard sharing with host")
+	OptionSwitch(createCmd, "filesystem-share", "", "enable host/guest filesystem sharing")
+	OptionSwitch(createCmd, "single-file", "", "create single-file VMDK disk")
+	OptionSwitch(createCmd, "preallocated", "", "pre-allocate VMDK disk")
+
 }

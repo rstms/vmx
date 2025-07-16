@@ -72,6 +72,7 @@ func init() {
 	OptionString(rootCmd, "config", "c", "", "config file")
 	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
 	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
+	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
 	hostname, err := os.Hostname()
 	cobra.CheckErr(err)
 	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
