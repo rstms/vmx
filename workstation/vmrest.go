@@ -2,6 +2,7 @@ package workstation
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -300,13 +301,19 @@ func (r *VMRestClient) GetPowerState(vm *VM) error {
 func (r *VMRestClient) GetParam(vm *VM, name string) (string, error) {
 	var response map[string]any
 	path := fmt.Sprintf("vms/%s/params/%s", vm.Id, url.PathEscape(name))
-	text, err := r.api.Get(path, &response)
+	_, err := r.api.Get(path, &response)
 	if err != nil {
 		return "", fmt.Errorf("GET %s request failed: %v\n", path, err)
 	}
-	log.Printf("text=%s\n", text)
-	log.Printf("response=%+v\n", response)
-	return fmt.Sprintf("%v", response["value"]), nil
+	if response["name"] == "" {
+		return "", fmt.Errorf("unkown property: '%s'", name)
+	}
+	data, err := json.Marshal(response["value"])
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+	//return fmt.Sprintf("%v", response["value"]), nil
 }
 
 func (r *VMRestClient) SetParam(vm *VM, name, value string) error {

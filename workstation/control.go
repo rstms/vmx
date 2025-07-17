@@ -174,7 +174,7 @@ type vmctl struct {
 	debug    bool
 	verbose  bool
 	Version  string
-	vmkey    map[string]bool
+	vmkey    map[string]string
 }
 
 // return true if VMWare Workstation Host is localhost
@@ -292,6 +292,7 @@ func NewController() (Controller, error) {
 			v.Remote = remote
 		}
 	}
+	v.mapVMKeys()
 	return &v, nil
 }
 
@@ -940,15 +941,11 @@ func (v *vmctl) mapVMKeys() error {
 	if err != nil {
 		return err
 	}
+	v.vmkey = make(map[string]string)
 	for k, _ := range vmap {
-		v.vmkey[k] = true
+		v.vmkey[strings.ToLower(k)] = k
 	}
 	return nil
-}
-
-func (v *vmctl) isVMKey(key string) bool {
-	_, ok := v.vmkey[key]
-	return ok
 }
 
 // convert VM struct to map[string]any
@@ -973,7 +970,8 @@ func (v *vmctl) queryVMProperty(vm *VM, property string) (string, bool, error) {
 		log.Printf("queryVMProperty(%s, %s)\n", vm.Name, property)
 	}
 
-	if !v.isVMKey(property) {
+	key, ok := v.vmkey[strings.ToLower(property)]
+	if !ok {
 		return "", false, nil
 	}
 
@@ -987,9 +985,14 @@ func (v *vmctl) queryVMProperty(vm *VM, property string) (string, bool, error) {
 		return "", false, err
 	}
 
-	value, ok := vmap[property]
+	value, ok := vmap[key]
 	if ok {
-		return fmt.Sprintf("%v", value), true, nil
+		data, err := json.Marshal(value)
+		if err != nil {
+			return "", false, err
+		}
+		return string(data), true, nil
+		//return fmt.Sprintf("%v", value), true, nil
 	}
 	return "", false, nil
 }
