@@ -559,6 +559,17 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	return nil
 }
 
+func (v *vmctl) requirePowerState(vm *VM, state, action string) error {
+	err := v.api.GetPowerState(vm)
+	if err != nil {
+		return err
+	}
+	if vm.PowerState != state {
+		return fmt.Errorf("Power state '%s' is required to %s", state, action)
+	}
+	return nil
+}
+
 func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 	if v.debug {
 		log.Printf("checkPowerState(%s, %s, %s)\n", vm.Name, command, state)
@@ -997,6 +1008,16 @@ func (v *vmctl) queryVMProperty(vm *VM, property string) (string, bool, error) {
 	return "", false, nil
 }
 
+func FormatVMXBool(value string) (string, error) {
+	switch strings.ToLower(value) {
+	case "true", "1", "t", "on", "yes", "y", "enable", "enabled":
+		return "TRUE", nil
+	case "false", "0", "f", "off", "no", "n", "disable", "disabled":
+		return "TRUE", nil
+	}
+	return "", fmt.Errorf("cannot format '%s' as boolean", value)
+}
+
 func (v *vmctl) SetProperty(vid, property, value string) error {
 	if v.debug {
 		log.Printf("SetProperty(%s, %s, %s)\n", vid, property, value)
@@ -1008,11 +1029,83 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 	if v.verbose {
 		fmt.Printf("[%s] setting %s=%s\n", vm.Name, property, value)
 	}
+
 	if property == "vmx" {
 		return v.WriteHostFile(&vm, vm.Name+".vmx", []byte(value))
 	} else {
-		// FIXME: handle setting VM property keys
+		key, ok := v.vmkey[strings.ToLower(property)]
+		if ok {
+			property = key
+			switch property {
+			case "Id", "Path", "Name", "IpAddress":
+				return fmt.Errorf("Property '%s' is read-only", key)
 
+			case "DiskSize":
+				return fmt.Errorf("Use host utility vmware-vdiskmanager to modify %s", key)
+
+			case "Running", "PowerState":
+				return fmt.Errorf("Use 'start', 'stop', or 'kill' to modify %s", key)
+
+			case "MacAddress":
+				return fmt.Errorf("Use 'update nic' to modify %s", key)
+
+			case "IsoPath", "IsoAttached", "IsoAttachOnStart":
+				return fmt.Errorf("Use 'update iso' to modify %s", key)
+
+			case "SerialAttached", "SerialPipe":
+				return fmt.Errorf("Use 'update tty' to modify %s", key)
+
+			case "VncEnabled", "VncPort":
+				return fmt.Errorf("Use 'update vnc' to modify %s", key)
+
+			case "EnableFileSystemShare":
+				return fmt.Errorf("Use 'update share' to modify %s", key)
+
+			case "CpuCount":
+				property = "numvcpus"
+
+			case "RamSize":
+				property = "memsize"
+				size, err := SizeParse(value)
+				if err != nil {
+					return err
+				}
+				value = fmt.Sprintf("%d", size/MB)
+
+			case "GuestTimeZone":
+				property = "guestTimeZone"
+
+			case "GuestOS":
+				property = "guestOS"
+
+			case "EnableCopy":
+				property = "isolation.tools.copy.disable"
+				v, err := FormatVMXBool(value)
+				if err != nil {
+					return err
+				}
+				value = v
+			case "EnablePaste":
+				property = "isolation.tools.paste.disable"
+				v, err := FormatVMXBool(value)
+				if err != nil {
+					return err
+				}
+				value = v
+			case "EnableDragAndDrop":
+				property = "isolation.tools.dnd.disable"
+				v, err := FormatVMXBool(value)
+				if err != nil {
+					return err
+				}
+				value = v
+
+			}
+			err := v.requirePowerState(&vm, "poweredOff", fmt.Sprintf("modify '%s'", key))
+			if err != nil {
+				return err
+			}
+		}
 		err = v.api.SetParam(&vm, property, value)
 		if err != nil {
 			return err

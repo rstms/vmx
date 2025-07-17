@@ -327,7 +327,7 @@ func (r *VMRestClient) SetParam(vm *VM, name, value string) error {
 	if err != nil {
 		return fmt.Errorf("PUT %s request failed: %v\n", path, err)
 	}
-	log.Printf("text=%s\n", text)
-	log.Printf("response=%+v\n", response)
+	log.Printf("SetParam response text: %s\n", text)
+	log.Printf("SetParam response: %+v\n", response)
 	return nil
 }
