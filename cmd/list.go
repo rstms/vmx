@@ -39,7 +39,7 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list VID|PATH|iso",
+	Use:   "list [VID|PATH|iso]",
 	Short: "List VM files",
 	Long: `
 List host files.  If PATH is an instance name the instance directory is 
@@ -49,10 +49,13 @@ Unless the --json flag is used, the output is the host's default directory
 list format.  Use --long for a long listing.
 `,
 	Aliases: []string{"ls"},
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
-		vid := args[0]
+		var vid string
+		if len(args) > 0 {
+			vid = args[0]
+		}
 		options := workstation.FilesOptions{
 			Detail: viper.GetBool("long"),
 			Iso:    workstation.IsIsoPath(vid),

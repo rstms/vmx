@@ -318,6 +318,8 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, []VMFile, err
 		path = FormatIsoPath(v.IsoPath, vid)
 	} else if strings.Contains(vid, sep) {
 		path = vid
+	} else if vid == "" {
+		path = v.Path
 	} else {
 		vm, err := v.api.GetVM(vid)
 		if err != nil {

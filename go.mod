@@ -1,8 +1,6 @@
 module github.com/rstms/vmx
 
-go 1.23.0
-
-toolchain go1.23.11
+go 1.24.5
 
 require (
 	github.com/spf13/cobra v1.9.1
