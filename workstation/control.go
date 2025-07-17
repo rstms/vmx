@@ -27,14 +27,14 @@ type VID struct {
 }
 
 type VMState struct {
-	Name       string
-	PowerState string
-	IpAddress  string
+	Name       string `json:"name"`
+	PowerState string `json: "power_state"`
+	IpAddress  string `json: ip"`
 }
 
 type VMFile struct {
-	Name   string
-	Length uint64
+	Name   string `json:"name,omitzero"`
+	Length uint64 `json:"length,omitzero"`
 }
 
 type VM struct {
@@ -54,7 +54,7 @@ type VM struct {
 	IsoPath          string
 
 	SerialAttached bool
-	SerialPath     string
+	SerialPipe     string
 
 	VncEnabled bool
 	VncPort    int
@@ -68,44 +68,37 @@ type VM struct {
 	PowerState string
 }
 
-/*
-func (v *VM) String() string {
-	data, err := json.MarshalIndent(v)
-	if err != nil {
-		log.Fatalf("VM Marshal failed: %v", err)
-	}
-	var vmap map[string]any
-	err = json.Unmarshal(data, &vmap)
-	if err != nil {
-		log.Fatalf("VM Unmarshal failed: %v", err)
-	}
-
-	vmap["RamSize"] = FormatSize(v.RamSize)
-	vmap["DiskSize"] = FormatSize(v.DiskSize)
-
-	data, err := json.Marshal(&vmap)
-	if err != nil {
-		log.Fatalf("VM Marshal failed: %v", err)
-	}
-	return string(data)
-}
-*/
-
 type CreateOptions struct {
-	CpuCount          int
-	MemorySize        string
-	DiskSize          string
-	DiskPreallocated  bool
-	DiskSingleFile    bool
-	EFIBoot           bool
-	HostTimeSync      bool
-	GuestTimeZone     string
-	EnableDragAndDrop bool
-	EnableClipboard   bool
-	MacAddress        string
-	IsoSource         string
-	IsoAttached       bool
-	Start             *StartOptions
+	GuestOS                string
+	CpuCount               int
+	MemorySize             string
+	DiskSize               string
+	DiskPreallocated       bool
+	DiskSingleFile         bool
+	EFIBoot                bool
+	HostTimeSync           bool
+	GuestTimeZone          string
+	DisableDragAndDrop     bool
+	DisableClipboard       bool
+	DisableFilesystemShare bool
+	EthernetPresent        bool
+	MacAddress             string
+	IsoPath                string
+	IsoAttached            bool
+	SerialPipe             string
+}
+
+func NewCreateOptions() *CreateOptions {
+	return &CreateOptions{
+		CpuCount:               1,
+		MemorySize:             "1G",
+		DiskSize:               "16G",
+		GuestOS:                "other-64",
+		DisableDragAndDrop:     true,
+		DisableClipboard:       true,
+		DisableFilesystemShare: true,
+		EthernetPresent:        true,
+	}
 }
 
 type DestroyOptions struct {
@@ -124,7 +117,12 @@ type StopOptions struct {
 	Wait     bool
 }
 
-type ListOptions struct {
+type FilesOptions struct {
+	Detail bool
+	Iso    bool
+}
+
+type ShowOptions struct {
 	Running bool
 	Detail  bool
 }
@@ -145,7 +143,7 @@ const (
 )
 
 type Controller interface {
-	List(string, ListOptions) ([]VM, error)
+	Show(string, ShowOptions) ([]VM, error)
 	Create(string, CreateOptions) (VM, error)
 	Destroy(string, DestroyOptions) error
 	Start(string, StartOptions) error
@@ -157,7 +155,7 @@ type Controller interface {
 	RemoteExec(string, *int) ([]string, error)
 	Upload(string, string, string) error
 	Download(string, string, string) error
-	ListFiles(string) ([]VMFile, error)
+	Files(string, FilesOptions) ([]string, []VMFile, error)
 	Close() error
 }
 
@@ -166,6 +164,7 @@ type vmctl struct {
 	Username string
 	KeyFile  string
 	Path     string
+	IsoPath  string
 	api      *VMRestClient
 	winexec  *WinExecClient
 	relay    *Relay
@@ -233,6 +232,17 @@ func NewController() (Controller, error) {
 		Version:  Version,
 	}
 
+	viper.SetDefault("vmware_path", "/var/vmware")
+	v.Path, err = PathNormalize(viper.GetString("vmware_path"))
+	if err != nil {
+		return nil, err
+	}
+	viper.SetDefault("iso_path", "/var/vmware/iso")
+	v.IsoPath, err = PathNormalize(viper.GetString("iso_path"))
+	if err != nil {
+		return nil, err
+	}
+
 	relayConfig := viper.GetString("ssh_relay")
 	if relayConfig != "" {
 		r, err := NewRelay(relayConfig)
@@ -295,42 +305,68 @@ func (v *vmctl) Close() error {
 	return nil
 }
 
-func (v *vmctl) ListFiles(vid string) ([]VMFile, error) {
+func (v *vmctl) Files(vid string, options FilesOptions) ([]string, []VMFile, error) {
 	if v.debug {
-		log.Printf("ListFiles(%s)\n", vid)
+		log.Printf("Files(%s, %+v)\n", vid, options)
 	}
-	vm, err := v.api.GetVM(vid)
-	if err != nil {
-		return []VMFile{}, err
+	lines := []string{}
+	files := []VMFile{}
+
+	sep := string(filepath.Separator)
+	var path string
+	if options.Iso {
+		path = FormatIsoPath(v.IsoPath, vid)
+	} else if strings.Contains(vid, sep) {
+		path = vid
+	} else {
+		vm, err := v.api.GetVM(vid)
+		if err != nil {
+			return lines, files, err
+		}
+		path, _ = filepath.Split(vm.Path)
 	}
 
-	dir, _ := filepath.Split(vm.Path)
-	dir = strings.TrimRight(dir, string(filepath.Separator))
-	path, err := PathFormat(v.Remote, dir)
+	path = strings.TrimRight(path, sep)
+
+	hostPath, err := PathFormat(v.Remote, path)
 	if err != nil {
-		return []VMFile{}, err
+		return lines, files, err
 	}
 
 	var command string
 	if v.Remote == "windows" {
-		command = "dir /-C " + path
+		if options.Detail {
+			command = "dir /-C"
+		} else {
+			command = "dir /B"
+		}
 	} else {
-		command = "ls -l " + path
+		if options.Detail {
+			command = "ls -l"
+		} else {
+			command = "ls"
+		}
 	}
-	olines, err := v.RemoteExec(command, nil)
+	lines, err = v.RemoteExec(command+" "+hostPath, nil)
 	if err != nil {
-		return []VMFile{}, err
+		return lines, files, err
 	}
-	files, err := ParseFileList(v.Remote, olines)
-	if err != nil {
-		return []VMFile{}, err
+	if options.Detail {
+		files, err = ParseFileList(v.Remote, lines)
+		if err != nil {
+			return lines, files, err
+		}
+	} else {
+		for _, line := range lines {
+			files = append(files, VMFile{Name: strings.TrimSpace(line)})
+		}
 	}
-	return files, nil
+	return lines, files, nil
 }
 
-func (v *vmctl) List(name string, options ListOptions) ([]VM, error) {
+func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 	if v.debug {
-		log.Printf("List(%s, %+v)\n", name, options)
+		log.Printf("Show(%s, %+v)\n", name, options)
 	}
 
 	vids := []VID{}
@@ -386,17 +422,138 @@ func (v *vmctl) List(name string, options ListOptions) ([]VM, error) {
 }
 
 func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
+	var vm VM
+
 	if v.debug {
 		log.Printf("Create: %s %+v\n", name, options)
 	}
-	return VM{}, fmt.Errorf("Error: %s", "unimplemented")
+
+	// check for existing instance
+	_, err := v.api.GetVM(name)
+	if err == nil {
+		return vm, fmt.Errorf("create failed, instance '%s' exists", name)
+	}
+
+	// display create options
+	if v.verbose {
+		ostr, err := FormatJSON(&options)
+		if err != nil {
+			return vm, err
+		}
+		fmt.Printf("[%s] create options: %s\n", name, ostr)
+	}
+
+	vm.Name = name
+	vm.Path = filepath.Join(viper.GetString("vmware_path"), name, name+".vmx")
+
+	// create instance directory
+	dir, _ := filepath.Split(vm.Path)
+	hostPath, err := PathFormat(v.Remote, dir)
+	if err != nil {
+		return vm, err
+	}
+	_, err = v.RemoteExec("mkdir "+hostPath, nil)
+	if err != nil {
+		return vm, err
+	}
+
+	if options.IsoPath != "" {
+		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, options.IsoPath))
+		if err != nil {
+			return vm, err
+		}
+		options.IsoPath = path
+	}
+
+	fmt.Printf("Create: options.IsoPath=%s\n", options.IsoPath)
+
+	// write vmx file
+	vmx, err := GenerateVMX(name, options)
+	if err != nil {
+		return vm, err
+	}
+	data, err := vmx.Read()
+	if err != nil {
+		return vm, err
+	}
+	err = v.WriteHostFile(&vm, vm.Name+".vmx", data)
+	if err != nil {
+		return vm, err
+	}
+
+	// create vmdk disk
+	pcd, err := PathChdirCommand(v.Remote, hostPath)
+	if err != nil {
+		return vm, err
+	}
+	command := pcd
+
+	diskSize, err := SizeParse(options.DiskSize)
+	if err != nil {
+		return vm, err
+	}
+	diskSizeMB := int64(diskSize / MB)
+
+	//fmt.Printf("options.DiskSize: %s\n", options.DiskSize)
+	//fmt.Printf("diskSize: %d\n", diskSize)
+	//fmt.Printf("diskSizeMB: %d\n", diskSizeMB)
+
+	diskType := ParseDiskType(options.DiskSingleFile, options.DiskPreallocated)
+
+	command += fmt.Sprintf("vmware-vdiskmanager -c -s %dMB -a nvme -t %d %s.vmdk", diskSizeMB, diskType, name)
+
+	result, err := v.RemoteExec(command, nil)
+	if err != nil {
+		return vm, err
+	}
+	if v.verbose {
+		fmt.Printf("[%s] %s\n", name, result)
+	}
+
+	return vm, nil
 }
 
 func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	if v.debug {
 		log.Printf("Destroy: %s %+v\n", vid, options)
 	}
-	return fmt.Errorf("Error: %s", "unimplemented")
+	vm, err := v.Get(vid)
+	if err != nil {
+		return err
+	}
+	err = v.api.GetPowerState(&vm)
+	if err != nil {
+		return err
+	}
+	if vm.PowerState != "poweredOff" {
+		if options.Force {
+			err := v.Stop(vm.Id, StopOptions{PowerOff: true, Wait: true})
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("[%s] --kill required; power state is '%s'", vm.Name, vm.PowerState)
+		}
+
+	}
+	dir, _ := filepath.Split(vm.Path)
+	hostPath, err := PathFormat(v.Remote, dir)
+	if err != nil {
+		return err
+	}
+	hostPath = strings.TrimRight(hostPath, "/\\")
+	var command string
+	switch v.Remote {
+	case "windows":
+		command = "rmdir /S /Q " + hostPath
+	default:
+		command = "rm -rf " + hostPath
+	}
+	_, err = v.RemoteExec(command, nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
@@ -1099,19 +1256,15 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	}
 	switch v.Shell {
 	case "winexec":
-		var code int
 		var stdout string
 		var err error
 		if strings.HasPrefix(command, "start ") {
-			code, err = v.winexec.Spawn(command)
+			err = v.winexec.Spawn(command, exitCode)
 		} else {
-			code, stdout, _, err = v.winexec.Exec("cmd", []string{"/c", command})
+			stdout, _, err = v.winexec.Exec("cmd", []string{"/c", command}, exitCode)
 		}
 		if err != nil {
 			return []string{}, err
-		}
-		if exitCode != nil {
-			*exitCode = code
 		}
 		return strings.Split(strings.TrimSpace(stdout), "\n"), nil
 	case "ssh":

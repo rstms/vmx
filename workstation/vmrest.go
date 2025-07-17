@@ -247,13 +247,14 @@ func (r *VMRestClient) GetConfig(vm *VM) error {
 		}
 	}
 	vm.SerialAttached = false
-	vm.SerialPath = ""
+	vm.SerialPipe = ""
 	if len(response.SerialPortList.Devices) > 0 {
 		captured := false
 		for _, port := range response.SerialPortList.Devices {
 			if !captured {
 				vm.SerialAttached = true
-				vm.SerialPath = ""
+				// FIXME: catch serial pipe name here
+				vm.SerialPipe = ""
 				captured = true
 			} else {
 				log.Printf("WARNING: serial port %d not captured: %v", port.Index, port)

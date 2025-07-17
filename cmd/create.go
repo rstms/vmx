@@ -50,22 +50,37 @@ unless specified with option flags.
 		InitController()
 		name := args[0]
 
-		options := workstation.CreateOptions{
-			CpuCount:          viper.GetInt("cpu"),
-			MemorySize:        viper.GetString("ram"),
-			DiskSize:          viper.GetString("disk"),
-			DiskPreallocated:  viper.GetBool("preallocate"),
-			DiskSingleFile:    viper.GetBool("single_file"),
-			EFIBoot:           viper.GetBool("efi"),
-			HostTimeSync:      viper.GetBool("time_sync"),
-			GuestTimeZone:     viper.GetString("timezone"),
-			EnableDragAndDrop: viper.GetBool("drag_and_drop"),
-			EnableClipboard:   viper.GetBool("clipboard"),
-			MacAddress:        viper.GetString("mac"),
-			IsoSource:         viper.GetString("iso"),
-			IsoAttached:       !viper.GetBool("detach"),
+		options := workstation.NewCreateOptions()
+
+		options.CpuCount = viper.GetInt("cpu")
+		options.MemorySize = viper.GetString("ram")
+		options.DiskSize = viper.GetString("disk")
+		options.DiskPreallocated = viper.GetBool("preallocate")
+		options.DiskSingleFile = viper.GetBool("single_file")
+		options.EFIBoot = viper.GetBool("efi")
+		options.HostTimeSync = viper.GetBool("time_sync")
+		options.GuestTimeZone = viper.GetString("timezone")
+		options.DisableDragAndDrop = !viper.GetBool("drag_and_drop")
+		options.DisableClipboard = !viper.GetBool("clipboard")
+		options.DisableFilesystemShare = !viper.GetBool("filesystem_share")
+		options.MacAddress = viper.GetString("mac")
+		options.IsoPath = viper.GetString("iso")
+		options.IsoAttached = !viper.GetBool("detach_iso")
+		switch {
+		case viper.GetBool("openbsd"):
+			options.GuestOS = "openbsd"
+		case viper.GetBool("debian"):
+			options.GuestOS = "debian"
+		case viper.GetBool("windows"):
+			options.GuestOS = "windows"
+		case viper.GetBool("ubuntu"):
+			options.GuestOS = "ubuntu"
+		default:
+			options.GuestOS = "other"
 		}
-		vm, err := vmx.Create(name, options)
+		fmt.Printf("cmd/Create: viper.GetString(iso)=%s\n", viper.GetString("iso"))
+		fmt.Printf("cmd/Create: options.IsoPath=%s\n", options.IsoPath)
+		vm, err := vmx.Create(name, *options)
 		cobra.CheckErr(err)
 		if viper.GetBool("verbose") {
 			fmt.Println(vm)
@@ -81,13 +96,16 @@ func init() {
 	OptionString(createCmd, "timezone", "", "UTC", "guest time zone")
 	OptionString(createCmd, "mac", "", "", "MAC address")
 	OptionString(createCmd, "iso", "", "", "boot ISO pathname or URL")
-	OptionSwitch(createCmd, "detach", "", "detach ISO")
+	OptionSwitch(createCmd, "detach-iso", "", "detach ISO at boot")
 	OptionSwitch(createCmd, "efi", "", "EFI boot")
-	OptionSwitch(createCmd, "time-sync", "", "sync time with host")
+	OptionSwitch(createCmd, "time-sync", "", "enable time sync with host")
 	OptionSwitch(createCmd, "drag-and-drop", "", "enable drag-and-drop")
 	OptionSwitch(createCmd, "clipboard", "", "enable clipboard sharing with host")
 	OptionSwitch(createCmd, "filesystem-share", "", "enable host/guest filesystem sharing")
 	OptionSwitch(createCmd, "single-file", "", "create single-file VMDK disk")
 	OptionSwitch(createCmd, "preallocated", "", "pre-allocate VMDK disk")
-
+	OptionSwitch(createCmd, "openbsd", "", "OpenBSD guest")
+	OptionSwitch(createCmd, "debian", "", "Debian guest")
+	OptionSwitch(createCmd, "ubuntu", "", "Ubuntu guest")
+	OptionSwitch(createCmd, "windows", "", "Windows guest")
 }

@@ -3,7 +3,6 @@ package workstation
 import (
 	"fmt"
 	"github.com/spf13/viper"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +20,7 @@ func SizeParse(param string) (int64, error) {
 	var multiplier int64 = 1
 
 	match := SIZE_PATTERN.FindStringSubmatch(param)
-	fmt.Printf("match: %d %v\n", len(match), match)
+	//fmt.Printf("match: %d %v\n", len(match), match)
 	if len(match) != 3 {
 		return 0, fmt.Errorf("failed parsing size parameter: '%s'", param)
 	}
@@ -48,7 +47,7 @@ func SizeParse(param string) (int64, error) {
 		return 0, err
 	}
 	size := int64(fsize * float64(multiplier))
-	fmt.Printf("%s == %d\n", param, size)
+	//fmt.Printf("%s == %d\n", param, size)
 	return size, nil
 }
 
@@ -92,6 +91,6 @@ func FormatSize(size int64) string {
 			sizeStr += suffix
 		}
 	}
-	log.Printf("FormatSize(%d) -> %s\n", size, sizeStr)
+	//log.Printf("FormatSize(%d) -> %s\n", size, sizeStr)
 	return sizeStr
 }

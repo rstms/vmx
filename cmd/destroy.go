@@ -31,9 +31,14 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
+	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var destroyCmd = &cobra.Command{
@@ -45,11 +50,43 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("destroy called")
+		InitController()
+		vid := args[0]
+		vm, err := vmx.Get(vid)
+		cobra.CheckErr(err)
+		if confirm(fmt.Sprintf("Confirm IRRECOVERABLE DESTRUCTION of VM instance '%s'", vm.Name)) {
+			options := workstation.DestroyOptions{
+				Force: viper.GetBool("kill"),
+			}
+			err := vmx.Destroy(vm.Id, options)
+			cobra.CheckErr(err)
+		}
 	},
+}
+
+func confirm(prompt string) bool {
+	if viper.GetBool("force") {
+		return true
+	}
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("%s [y/N]:", prompt)
+		response, err := reader.ReadString('\n')
+		cobra.CheckErr(err)
+		response = strings.ToLower(strings.TrimSpace(response))
+		if response == "y" || response == "yes" {
+			return true
+		} else if response == "n" || response == "no" || response == "" {
+			fmt.Println("Cowardly refused.")
+			return false
+		}
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(destroyCmd)
+	OptionSwitch(destroyCmd, "force", "", "suppress confirmation prompt")
+	OptionSwitch(destroyCmd, "kill", "", "destroy running instance")
 }

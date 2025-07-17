@@ -56,6 +56,7 @@ The instance must be in the 'poweredOff' state.
 The original content of the file is saved in a backup file in the current
 directory.
 `,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]

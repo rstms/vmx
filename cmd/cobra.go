@@ -49,12 +49,11 @@ func OptionString(cmd *cobra.Command, name, flag, defaultValue, description stri
 		viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
 	} else {
 		if flag == "" {
-			cmd.Flags().String(name, defaultValue, description)
+			cmd.PersistentFlags().String(name, defaultValue, description)
 		} else {
-			cmd.Flags().StringP(name, flag, defaultValue, description)
+			cmd.PersistentFlags().StringP(name, flag, defaultValue, description)
 		}
-
-		viper.BindPFlag(ViperKey(name), cmd.Flags().Lookup(name))
+		viper.BindPFlag(ViperKey(name), cmd.PersistentFlags().Lookup(name))
 	}
 }
 
@@ -120,6 +119,7 @@ func ExpandPath(pathname string) string {
 		}
 		pathname = filepath.Join(home, pathname[1:])
 	}
+	pathname = os.ExpandEnv(pathname)
 	return pathname
 }
 

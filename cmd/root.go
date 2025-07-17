@@ -73,6 +73,8 @@ func init() {
 	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
 	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
 	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
+	OptionSwitch(rootCmd, "text", "", "format output as text if command is capable")
+	OptionSwitch(rootCmd, "json", "", "format output as JSON (default on most commands)")
 	hostname, err := os.Hostname()
 	cobra.CheckErr(err)
 	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
@@ -80,6 +82,8 @@ func init() {
 	cobra.CheckErr(err)
 	OptionString(rootCmd, "user", "", user.Username, "workstation user")
 	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
+	OptionSwitch(rootCmd, "all", "a", "select all items")
+	OptionSwitch(rootCmd, "long", "l", "add output detail")
 }
 func InitController() {
 	c, err := workstation.NewController()
