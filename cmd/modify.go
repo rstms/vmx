@@ -32,6 +32,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
@@ -168,6 +169,26 @@ Changes can be specified for multiple categories in a single command.
 			options.ModifyEFI = true
 		}
 
+		shareEnable := viper.GetString("share_enable")
+		shareDisable := viper.GetBool("share_disable")
+		if shareEnable != "" && shareDisable {
+			err := fmt.Errorf("conflict: share-enable/share-disable")
+			cobra.CheckErr(err)
+		}
+		switch {
+		case shareEnable != "":
+			options.ModifyShare = true
+			host, guest, ok := strings.Cut(shareEnable, ",")
+			if !ok || host == "" || guest == "" {
+				err := fmt.Errorf("share-enable path format (host_path,guest_path): '%s'", shareEnable)
+				cobra.CheckErr(err)
+			}
+			options.SharedHostPath = host
+			options.SharedGuestPath = guest
+		case shareDisable:
+			options.ModifyShare = true
+		}
+
 		actions, err := vmx.Modify(vm.Name, options)
 		cobra.CheckErr(err)
 		if OutputJSON {
@@ -206,5 +227,8 @@ func init() {
 
 	OptionSwitch(modifyCmd, "boot-efi", "", "set EFI boot firmware")
 	OptionSwitch(modifyCmd, "boot-bios", "", "set BIOS boot firmware")
+
+	OptionString(modifyCmd, "share-enable", "", "", "enable filesystem share 'host,guest'")
+	OptionSwitch(modifyCmd, "share-disable", "", "disable filesystem share")
 
 }

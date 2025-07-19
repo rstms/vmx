@@ -90,11 +90,14 @@ type CreateOptions struct {
 	SerialAppMode          bool
 	VNCEnabled             bool
 	VNCPort                int
+	SharedHostPath         string
+	SharedGuestPath        string
 	ModifyNIC              bool
 	ModifyISO              bool
 	ModifyTTY              bool
 	ModifyVNC              bool
 	ModifyEFI              bool
+	ModifyShare            bool
 }
 
 func NewCreateOptions() *CreateOptions {
@@ -1502,12 +1505,12 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 
 func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	if v.debug {
-		log.Printf("Modify(%s, %+v)\n", vid, options)
+		fmt.Printf("Modify(%s, %+v)\n", vid, options)
 		out, err := FormatJSON(&options)
 		if err != nil {
 			return nil, err
 		}
-		log.Println(out)
+		fmt.Println(out)
 	}
 	actions := []string{}
 	vm, err := v.api.GetVM(vid)
@@ -1580,6 +1583,16 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 		}
 		actions = append(actions, action)
 	}
+
+	if options.ModifyShare {
+		fmt.Printf("ModifyShare: host=%s guest=%s\n", options.SharedHostPath, options.SharedGuestPath)
+		action, err := vmx.SetShare(options.SharedHostPath, options.SharedGuestPath)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
 	editedData, err := vmx.Read()
 	if err != nil {
 		return nil, err

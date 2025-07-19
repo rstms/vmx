@@ -370,3 +370,44 @@ func (v *VMX) SetVNC(enabled bool, port int) (string, error) {
 	}
 	return fmt.Sprintf("enabled VNC on port %d", port), nil
 }
+
+/*
+> isolation.tools.hgfs.disable = "FALSE"
+> sharedFolder0.present = "TRUE"
+> sharedFolder0.enabled = "TRUE"
+> sharedFolder0.readAccess = "TRUE"
+> sharedFolder0.writeAccess = "TRUE"
+> sharedFolder0.hostPath = "H:\vmware\howdy_share"
+> sharedFolder0.guestName = "howdy_share"
+> sharedFolder0.expiration = "never"
+> sharedFolder.maxNum = "1"
+*/
+func (v *VMX) SetShare(hostPath, guestPath string) (string, error) {
+	if v.debug {
+		log.Printf("SetShare(%s, %s)\n", hostPath, guestPath)
+	}
+
+	if hostPath != "" {
+		formatted, err := PathFormat(v.hostOS, hostPath)
+		if err != nil {
+			return "", err
+		}
+		hostPath = formatted
+	}
+	v.removePrefix("sharedFolder")
+	v.removePrefix("isolation.tools.hgfs.")
+	if hostPath == "" {
+		v.addLine(`isolation.tools.hgfs.disable = "TRUE"`)
+		return "disabled filesystem share", nil
+	}
+	v.addLine(`isolation.tools.hgfs.disable = "FALSE"`)
+	v.addLine(`sharedFolder0.present = "TRUE"`)
+	v.addLine(`sharedFolder0.enabled = "TRUE"`)
+	v.addLine(`sharedFolder0.readAccess = "TRUE"`)
+	v.addLine(`sharedFolder0.writeAccess = "TRUE"`)
+	v.addLine(fmt.Sprintf(`sharedFolder0.guestName = "%s"`, guestPath))
+	v.addLine(fmt.Sprintf(`sharedFolder0.hostPath = "%s"`, hostPath))
+	v.addLine(`sharedFolder0.expiration = "never"`)
+	v.addLine(`sharedFolder0.maxNum = "1"`)
+	return fmt.Sprintf("enabled filesystem share host='%s' guest='%s'", hostPath, guestPath), nil
+}
