@@ -62,9 +62,13 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 		}
 	}
 
-	tlsConfig := tls.Config{}
+	transport := http.Transport{
+		IdleConnTimeout:   time.Duration(viper.GetInt64("idle_conn_timeout")) * time.Second,
+		DisableKeepAlives: viper.GetBool("disable_keepalives"),
+	}
 
 	if certFile != "" || keyFile != "" || caFile != "" {
+		tlsConfig := tls.Config{}
 		if certFile == "" || keyFile == "" || caFile == "" {
 			return nil, fmt.Errorf("incomplete TLS config: cert=%s key=%s ca=%s\n", certFile, keyFile, caFile)
 		}
@@ -86,15 +90,10 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 		caCertPool.AppendCertsFromPEM(caCert)
 		tlsConfig.Certificates = []tls.Certificate{cert}
 		tlsConfig.RootCAs = caCertPool
+		transport.TLSClientConfig = &tlsConfig
 	}
 
-	api.Client = &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig:   &tlsConfig,
-			IdleConnTimeout:   time.Duration(viper.GetInt64("idle_conn_timeout")) * time.Second,
-			DisableKeepAlives: viper.GetBool("disable_keepalives"),
-		},
-	}
+	api.Client = &http.Client{Transport: &transport}
 
 	return &api, nil
 }
@@ -115,6 +114,11 @@ func LogJSON(label string, v any) {
 	} else {
 		log.Printf("%s: %s\n", label, text)
 	}
+}
+
+func (a *APIClient) Close() {
+	a.Client.CloseIdleConnections()
+	a.Client = nil
 }
 
 func (a *APIClient) Get(path string, response interface{}) (string, error) {

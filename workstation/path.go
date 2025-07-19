@@ -2,6 +2,7 @@ package workstation
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -44,7 +45,7 @@ func PathNormalize(path string) (string, error) {
 }
 
 func PathFormat(os, path string) (string, error) {
-	//log.Printf("PathFormat(%s, %s)\n", os, path)
+	log.Printf("PathFormat(%s, %s)\n", os, path)
 	path, err := PathNormalize(path)
 	if err != nil {
 		return "", err
@@ -52,7 +53,7 @@ func PathFormat(os, path string) (string, error) {
 	switch os {
 	case "windows":
 		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(path)
-		//log.Printf("match: %d %v\n", len(match), match)
+		log.Printf("match: %d %v\n", len(match), match)
 		if len(match) == 3 {
 			path = string(match[1][1]) + ":\\" + match[2]
 		}
@@ -67,7 +68,7 @@ func PathFormat(os, path string) (string, error) {
 	case "default":
 		path = filepath.ToSlash(path)
 	}
-	//log.Printf("PathFormat returning: %s\n", path)
+	log.Printf("PathFormat returning: %s\n", path)
 	return path, nil
 }
 
@@ -163,7 +164,7 @@ func FormatIsoPathname(isoPath, path string) string {
 	if file == "" {
 		return ""
 	}
-	//log.Printf("isoPath=%s path=%s dir=%s file=%s\n", isoPath, path, dir, file)
+	log.Printf("isoPath=%s path=%s dir=%s file=%s\n", isoPath, path, dir, file)
 	if strings.HasPrefix(dir, "iso"+string(filepath.Separator)) {
 		dir = filepath.Join(isoPath, dir[4:])
 	} else if !strings.HasPrefix(dir, string(filepath.Separator)) {

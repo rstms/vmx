@@ -65,6 +65,4 @@ func init() {
 	OptionSwitch(startCmd, "no-stretch", "", "disable stretched display")
 	OptionSwitch(startCmd, "background", "", "start in background mode")
 	OptionSwitch(startCmd, "fullscreen", "", "start in full-screen mode")
-	OptionSwitch(startCmd, "no-wait", "W", "exit after request")
-	OptionSwitch(startCmd, "wait", "w", "wait for poweredOn state")
 }

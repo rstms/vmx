@@ -32,50 +32,33 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var showCmd = &cobra.Command{
-	Use:   "show [VID]",
-	Short: "Display VM instances",
+var catCmd = &cobra.Command{
+	Use:   "cat INSTANCE",
+	Short: "output VMX file content",
 	Long: `
-Display VM instance data
+Write the content of the instance's VMX file to stdout
 `,
-	Aliases: []string{"ps"},
-	Args:    cobra.RangeArgs(0, 1),
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
-		vid := ""
-		if len(args) > 0 {
-			vid = args[0]
-		}
-		options := workstation.ShowOptions{
-			Detail:  viper.GetBool("long"),
-			Running: !viper.GetBool("all"),
-		}
-		vms, err := vmx.Show(vid, options)
+		vid := args[0]
+		content, err := vmx.GetProperty(vid, "vmx")
 		cobra.CheckErr(err)
-		if options.Detail {
-			fmt.Println(FormatJSON(vms))
+		content = strings.TrimSpace(content)
+		if OutputJSON {
+			lines := strings.Split(content, "\n")
+			fmt.Println(FormatJSON(lines))
 		} else {
-			names := make([]string, len(vms))
-			for i, vm := range vms {
-				if OutputJSON {
-					names[i] = vm.Name
-				} else {
-					fmt.Println(vm.Name)
-				}
-			}
-			if OutputJSON {
-				fmt.Println(FormatJSON(names))
-			}
+			fmt.Println(content)
 		}
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(showCmd)
+	rootCmd.AddCommand(catCmd)
 }

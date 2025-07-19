@@ -51,7 +51,7 @@ type VM struct {
 
 	IsoAttached      bool
 	IsoAttachOnStart bool
-	IsoPath          string
+	IsoFile          string
 
 	SerialAttached bool
 	SerialPipe     string
@@ -81,11 +81,20 @@ type CreateOptions struct {
 	DisableDragAndDrop     bool
 	DisableClipboard       bool
 	DisableFilesystemShare bool
-	EthernetPresent        bool
 	MacAddress             string
-	IsoPath                string
-	IsoAttached            bool
+	IsoPresent             bool
+	IsoFile                string
+	IsoBootConnected       bool
 	SerialPipe             string
+	SerialClient           bool
+	SerialAppMode          bool
+	VNCEnabled             bool
+	VNCPort                int
+	ModifyNIC              bool
+	ModifyISO              bool
+	ModifyTTY              bool
+	ModifyVNC              bool
+	ModifyEFI              bool
 }
 
 func NewCreateOptions() *CreateOptions {
@@ -93,11 +102,13 @@ func NewCreateOptions() *CreateOptions {
 		CpuCount:               1,
 		MemorySize:             "1G",
 		DiskSize:               "16G",
-		GuestOS:                "other-64",
+		GuestOS:                "other",
 		DisableDragAndDrop:     true,
 		DisableClipboard:       true,
 		DisableFilesystemShare: true,
-		EthernetPresent:        true,
+		MacAddress:             "auto",
+		SerialAppMode:          true,
+		VNCPort:                5900,
 	}
 }
 
@@ -153,9 +164,12 @@ type Controller interface {
 	SetProperty(string, string, string) error
 	LocalExec(string, *int) ([]string, error)
 	RemoteExec(string, *int) ([]string, error)
+	RemoteSpawn(string, *int) error
 	Upload(string, string, string) error
 	Download(string, string, string) error
 	Files(string, FilesOptions) ([]string, []VMFile, error)
+	Wait(string, string) error
+	Modify(string, CreateOptions) (*[]string, error)
 	Close() error
 }
 
@@ -286,7 +300,7 @@ func NewController() (Controller, error) {
 			if err != nil {
 				return nil, err
 			}
-			if v.verbose {
+			if v.debug {
 				log.Printf("detected remote os: %s\n", remote)
 			}
 			v.Remote = remote
@@ -460,18 +474,18 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 		return vm, err
 	}
 
-	if options.IsoPath != "" {
-		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, options.IsoPath))
+	if options.IsoFile != "" {
+		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, options.IsoFile))
 		if err != nil {
 			return vm, err
 		}
-		options.IsoPath = path
+		options.IsoFile = path
 	}
 
-	fmt.Printf("Create: options.IsoPath=%s\n", options.IsoPath)
+	fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
 
 	// write vmx file
-	vmx, err := GenerateVMX(name, options)
+	vmx, err := GenerateVMX(v.Remote, name, &options)
 	if err != nil {
 		return vm, err
 	}
@@ -530,7 +544,7 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	}
 	if vm.PowerState != "poweredOff" {
 		if options.Force {
-			err := v.Stop(vm.Id, StopOptions{PowerOff: true, Wait: true})
+			err := v.Stop(vid, StopOptions{PowerOff: true, Wait: true})
 			if err != nil {
 				return err
 			}
@@ -594,7 +608,7 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 
 func (v *vmctl) Start(vid string, options StartOptions) error {
 	if v.debug {
-		log.Printf("Start(%s, %+v)\n", vid, options)
+		fmt.Printf("Start(%s, %+v)\n", vid, options)
 	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
@@ -642,7 +656,7 @@ func (v *vmctl) Start(vid string, options StartOptions) error {
 		fmt.Printf("[%s] requesting %s start...\n", vm.Name, visibility)
 	}
 
-	_, err = v.RemoteExec(command, nil)
+	err = v.RemoteSpawn(command, nil)
 	if err != nil {
 		return err
 	}
@@ -651,7 +665,7 @@ func (v *vmctl) Start(vid string, options StartOptions) error {
 	}
 
 	if options.Wait {
-		err := v.WaitPowerState(vm.Id, "poweredOn")
+		err := v.Wait(vid, "poweredOn")
 		if err != nil {
 			return err
 		}
@@ -697,41 +711,82 @@ func (v *vmctl) validatePowerState(state string) error {
 	}
 }
 
-func (v *vmctl) WaitPowerState(vid, state string) error {
+func (v *vmctl) queryPowerState(vid string) (string, error) {
+	v.api.Reset()
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return "", err
+	}
+	err = v.api.GetPowerState(&vm)
+	if err != nil {
+		return "", err
+	}
+	return vm.PowerState, nil
+}
+
+func (v *vmctl) Wait(vid, state string) error {
 	if v.debug {
-		log.Printf("WaitPowerState(%s, %s)\n", vid, state)
+		log.Printf("Wait(%s, %s)\n", vid, state)
+	}
+	switch strings.ToLower(state) {
+	case "up", "on", "running":
+		state = "poweredOn"
+	case "down", "off", "stopped":
+		state = "poweredOff"
 	}
 	err := v.validatePowerState(state)
 	if err != nil {
 		return err
 	}
-	vm, err := v.api.GetVM(vid)
-	if err != nil {
-		return err
-	}
+
 	if v.verbose {
-		fmt.Printf("[%s] awaiting %s...\n", vm.Name, state)
+		fmt.Printf("[%s] awaiting %s...\n", vid, state)
 	}
 	start := time.Now()
+	interval_seconds := viper.GetInt64("interval")
+	interval := time.Duration(interval_seconds) * time.Second
 	timeout_seconds := viper.GetInt64("timeout")
 	timeout := time.Duration(timeout_seconds) * time.Second
+	checkPower := true
+	running := false
 	for {
-		err := v.api.GetPowerState(&vm)
-		if err != nil {
-			return err
-		}
-		if vm.PowerState == state {
-			if v.verbose {
-				fmt.Printf("[%s] %s\n", vm.Name, state)
+		if (state == "poweredOn") && !running {
+			// if waiting for poweredOn, ensure vmrun shows the instance before querying with vmrest API
+			checkPower = false
+			vms, err := v.Show("", ShowOptions{Running: true})
+			if err != nil {
+				return err
 			}
-			return nil
+			for _, vm := range vms {
+				if vm.Name == vid {
+					// set checkPower after the next sleep
+					running = true
+				}
+			}
+		}
+
+		if checkPower {
+			newState, err := v.queryPowerState(vid)
+			if err != nil {
+				return err
+			}
+
+			if newState == state {
+				if v.verbose {
+					fmt.Printf("[%s] %s\n", vid, state)
+				}
+				return nil
+			}
 		}
 		if timeout_seconds != 0 {
 			if time.Since(start) > timeout {
-				return fmt.Errorf("[%s] timed out awaiting power state %s", vm.Name, state)
+				return fmt.Errorf("[%s] timed out awaiting power state %s", vid, state)
 			}
 		}
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(interval)
+		if running {
+			checkPower = true
+		}
 	}
 }
 
@@ -772,7 +827,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) error {
 		fmt.Printf("[%s] %s request complete\n", vm.Name, action)
 	}
 	if options.Wait {
-		err := v.WaitPowerState(vm.Id, "poweredOff")
+		err := v.Wait(vid, "poweredOff")
 		if err != nil {
 			return err
 		}
@@ -1049,7 +1104,7 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 			case "MacAddress":
 				return fmt.Errorf("Use 'update nic' to modify %s", key)
 
-			case "IsoPath", "IsoAttached", "IsoAttachOnStart":
+			case "IsoFile", "IsoAttached", "IsoAttachOnStart":
 				return fmt.Errorf("Use 'update iso' to modify %s", key)
 
 			case "SerialAttached", "SerialPipe":
@@ -1354,13 +1409,7 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	}
 	switch v.Shell {
 	case "winexec":
-		var stdout string
-		var err error
-		if strings.HasPrefix(command, "start ") {
-			err = v.winexec.Spawn(command, exitCode)
-		} else {
-			stdout, _, err = v.winexec.Exec("cmd", []string{"/c", command}, exitCode)
-		}
+		stdout, _, err := v.winexec.Exec("cmd", []string{"/c", command}, exitCode)
 		if err != nil {
 			return []string{}, err
 		}
@@ -1378,6 +1427,25 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 		return v.exec(v.Shell, []string{"/c", command}, "", exitCode)
 	}
 	return []string{}, fmt.Errorf("unexpected shell: %s", v.Shell)
+}
+
+func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
+	if v.debug {
+		log.Printf("RemoteSpawn('%s', %v)\n", command, exitCode)
+	}
+	switch v.Shell {
+	case "winexec":
+		return v.winexec.Spawn(command, exitCode)
+	case "ssh":
+		args := v.sshArgs()
+		if v.Remote == "windows" {
+			args = append(args, command)
+			command = ""
+		}
+		_, err := v.exec(v.Shell, args, command, exitCode)
+		return err
+	}
+	return fmt.Errorf("unexpected shell: %s", v.Shell)
 }
 
 // note: if exitCode is nil, exit != 0 is an error, otherwise the exit code will be set
@@ -1430,4 +1498,89 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 	}
 
 	return olines, err
+}
+
+func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
+	if v.debug {
+		log.Printf("Modify(%s, %+v)\n", vid, options)
+		out, err := FormatJSON(&options)
+		if err != nil {
+			return nil, err
+		}
+		log.Println(out)
+	}
+	actions := []string{}
+	vm, err := v.api.GetVM(vid)
+	if err != nil {
+		return nil, err
+	}
+	vmxFilename := vm.Name + ".vmx"
+	hostData, err := v.ReadHostFile(&vm, vmxFilename)
+	if err != nil {
+		return nil, err
+	}
+	vmx, err := GenerateVMX(v.Remote, vm.Name, NewCreateOptions())
+	if err != nil {
+		return nil, err
+	}
+	err = vmx.Write(hostData)
+	if err != nil {
+		return nil, err
+	}
+
+	if options.ModifyNIC {
+		action, err := vmx.SetEthernet(options.MacAddress)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyISO {
+		fmt.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", options.IsoFile, v.IsoPath)
+		path := FormatIsoPathname(v.IsoPath, options.IsoFile)
+		if path == "" {
+			return nil, fmt.Errorf("failed formatting ISO pathname: %s", options.IsoFile)
+		}
+		fmt.Printf("normalized=%s\n", path)
+		action, err := vmx.SetISO(options.IsoPresent, options.IsoBootConnected, path)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyTTY {
+		fmt.Printf("ModifyTTY: pipe=%s client=%v app=%v\n", options.SerialPipe, options.SerialClient, options.SerialAppMode)
+		action, err := vmx.SetSerial(options.SerialPipe, options.SerialClient, options.SerialAppMode)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyVNC {
+		action, err := vmx.SetVNC(options.VNCEnabled, options.VNCPort)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyEFI {
+		action, err := vmx.SetEFI(options.EFIBoot)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+	editedData, err := vmx.Read()
+	if err != nil {
+		return nil, err
+	}
+	err = v.WriteHostFile(&vm, vmxFilename, editedData)
+	if err != nil {
+		return nil, err
+	}
+	return &actions, nil
 }

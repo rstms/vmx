@@ -31,51 +31,28 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
-
-	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var showCmd = &cobra.Command{
-	Use:   "show [VID]",
-	Short: "Display VM instances",
+var waitCmd = &cobra.Command{
+	Use:   "wait VID POWER_STATE",
+	Short: "await instance power state",
 	Long: `
-Display VM instance data
+Repeatedly query the power state of the instance described by VID.
+When the instance power state matches POWER_STATE, exit 0
+If the timeout is reached, print an error and exit non-zero
+The default timeout (60 seconds) can be adjusted with the --timeout option
 `,
-	Aliases: []string{"ps"},
-	Args:    cobra.RangeArgs(0, 1),
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		vid := args[0]
+		state := args[1]
 		InitController()
-		vid := ""
-		if len(args) > 0 {
-			vid = args[0]
-		}
-		options := workstation.ShowOptions{
-			Detail:  viper.GetBool("long"),
-			Running: !viper.GetBool("all"),
-		}
-		vms, err := vmx.Show(vid, options)
+		err := vmx.Wait(vid, state)
 		cobra.CheckErr(err)
-		if options.Detail {
-			fmt.Println(FormatJSON(vms))
-		} else {
-			names := make([]string, len(vms))
-			for i, vm := range vms {
-				if OutputJSON {
-					names[i] = vm.Name
-				} else {
-					fmt.Println(vm.Name)
-				}
-			}
-			if OutputJSON {
-				fmt.Println(FormatJSON(names))
-			}
-		}
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(showCmd)
+	rootCmd.AddCommand(waitCmd)
 }

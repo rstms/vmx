@@ -56,6 +56,4 @@ var killCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(killCmd)
-	OptionSwitch(killCmd, "wait", "w", "wait for poweredOff state")
-	OptionSwitch(killCmd, "no-wait", "W", "exit after request")
 }

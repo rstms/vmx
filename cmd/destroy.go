@@ -72,7 +72,7 @@ func confirm(prompt string) bool {
 	}
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Printf("%s [y/N]:", prompt)
+		fmt.Printf("%s [y/N]: ", prompt)
 		response, err := reader.ReadString('\n')
 		cobra.CheckErr(err)
 		response = strings.ToLower(strings.TrimSpace(response))

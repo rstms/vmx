@@ -50,11 +50,11 @@ func NewVMRestClient() (*VMRestClient, error) {
 		verbose: viper.GetBool("verbose"),
 		debug:   viper.GetBool("debug"),
 	}
-	client.ResetIndex()
+	client.Reset()
 	return &client, nil
 }
 
-func (r *VMRestClient) ResetIndex() {
+func (r *VMRestClient) Reset() {
 	r.ByPath = make(map[string]VID)
 	r.ByName = make(map[string]VID)
 	r.ById = make(map[string]VID)
@@ -74,7 +74,7 @@ func (r *VMRestClient) GetVIDs() ([]VID, error) {
 		return []VID{}, fmt.Errorf("GET %s request failed: %v\n", path, err)
 	}
 
-	r.ResetIndex()
+	r.Reset()
 	vids := make([]VID, len(response))
 	for i, vid := range response {
 		path, err := PathNormalize(vid.Path)
@@ -212,7 +212,7 @@ func (r *VMRestClient) GetConfig(vm *VM) error {
 	}
 	vm.CpuCount = response.Cpu.Processors
 	vm.RamSize = FormatSize(int64(response.Memory) * MB)
-	vm.IsoPath = ""
+	vm.IsoFile = ""
 	vm.IsoAttached = false
 	vm.IsoAttachOnStart = false
 	if len(response.CddvdList.Devices) > 0 {
@@ -225,7 +225,7 @@ func (r *VMRestClient) GetConfig(vm *VM) error {
 					if err != nil {
 						return err
 					}
-					vm.IsoPath = path
+					vm.IsoFile = path
 					vm.IsoAttached = response.CddvdList.Devices[0].ConnectionStatus == 1
 					vm.IsoAttachOnStart = response.CddvdList.Devices[0].StartConnected
 					captured = true

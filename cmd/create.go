@@ -64,8 +64,9 @@ unless specified with option flags.
 		options.DisableClipboard = !viper.GetBool("clipboard")
 		options.DisableFilesystemShare = !viper.GetBool("filesystem_share")
 		options.MacAddress = viper.GetString("mac")
-		options.IsoPath = viper.GetString("iso")
-		options.IsoAttached = !viper.GetBool("detach_iso")
+		options.IsoFile = viper.GetString("iso")
+		options.IsoPresent = options.IsoFile != ""
+		options.IsoBootConnected = !viper.GetBool("detach_iso")
 		switch {
 		case viper.GetBool("openbsd"):
 			options.GuestOS = "openbsd"
@@ -79,7 +80,7 @@ unless specified with option flags.
 			options.GuestOS = "other"
 		}
 		fmt.Printf("cmd/Create: viper.GetString(iso)=%s\n", viper.GetString("iso"))
-		fmt.Printf("cmd/Create: options.IsoPath=%s\n", options.IsoPath)
+		fmt.Printf("cmd/Create: options.IsoFile=%s\n", options.IsoFile)
 		vm, err := vmx.Create(name, *options)
 		cobra.CheckErr(err)
 		if viper.GetBool("verbose") {

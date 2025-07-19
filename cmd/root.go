@@ -43,6 +43,14 @@ import (
 var cfgFile string
 var ExitCode *int
 
+var OutputJSON bool
+var OutputText bool
+
+const (
+	OutputFormatText = iota
+	OutputFormatJSON
+)
+
 var vmx workstation.Controller
 
 var rootCmd = &cobra.Command{
@@ -52,6 +60,14 @@ var rootCmd = &cobra.Command{
 	Long: `
 Control VMWare Workstation instances
 `,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		OutputText = true
+		OutputJSON = false
+		if viper.GetBool("json") {
+			OutputText = false
+			OutputJSON = true
+		}
+	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		if vmx != nil {
 			err := vmx.Close()
@@ -72,9 +88,10 @@ func init() {
 	OptionString(rootCmd, "config", "c", "", "config file")
 	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
 	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
+	OptionString(rootCmd, "timeout", "t", "60", "wait timeout in seconds")
+	OptionString(rootCmd, "interval", "i", "1", "wait query interval in seconds")
 	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
-	OptionSwitch(rootCmd, "text", "", "format output as text if command is capable")
-	OptionSwitch(rootCmd, "json", "", "format output as JSON (default on most commands)")
+	OptionSwitch(rootCmd, "json", "", "format output as JSON")
 	hostname, err := os.Hostname()
 	cobra.CheckErr(err)
 	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
@@ -84,6 +101,7 @@ func init() {
 	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
 	OptionSwitch(rootCmd, "all", "a", "select all items")
 	OptionSwitch(rootCmd, "long", "l", "add output detail")
+	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for expected powerState after start/stop/kill")
 }
 func InitController() {
 	c, err := workstation.NewController()
