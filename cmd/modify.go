@@ -39,13 +39,13 @@ import (
 )
 
 var modifyCmd = &cobra.Command{
-	Use:   "modify nic VID",
+	Use:   "modify VID",
 	Short: "modify instance configuration properties",
 	Long: `
 
 vnc modify [FLAGS] VID
 
-Change NIC, ISO, TTY, VNC, and EFI instance configuration parameters.
+Change instance NIC, ISO, TTY, VNC, EFI configuration parameters.  
 The instance must be in in the 'poweredOff' state.
 
 See the flags and options help for descriptions of the available settings.

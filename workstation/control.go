@@ -1514,6 +1514,12 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	err = v.requirePowerState(&vm, "poweredOff", "modify the instance")
+	if err != nil {
+		return nil, err
+	}
+
 	vmxFilename := vm.Name + ".vmx"
 	hostData, err := v.ReadHostFile(&vm, vmxFilename)
 	if err != nil {
