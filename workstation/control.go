@@ -173,6 +173,7 @@ type Controller interface {
 	Files(string, FilesOptions) ([]string, []VMFile, error)
 	Wait(string, string) error
 	Modify(string, CreateOptions) (*[]string, error)
+	SendKeys(string, string) error
 	Close() error
 }
 
