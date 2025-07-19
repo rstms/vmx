@@ -319,13 +319,13 @@ func (v *VMX) SetSerial(pipe string, isClient, appMode bool) (string, error) {
 	hostPipe := normalized
 
 	if v.debug {
-		fmt.Printf("SetSerial: hostOS: %s\n", v.hostOS)
+		log.Printf("SetSerial: hostOS: %s\n", v.hostOS)
 	}
 
 	if v.hostOS == "windows" {
 		normalized = strings.TrimLeft(normalized, "//.")
 		if v.debug {
-			fmt.Printf("normalized: %s\n", normalized)
+			log.Printf("normalized: %s\n", normalized)
 		}
 		if strings.HasPrefix(normalized, "pipe/") {
 			if len(normalized) <= 5 {

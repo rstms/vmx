@@ -95,7 +95,7 @@ func init() {
 	OptionString(createCmd, "ram", "", "2G", "memory size")
 	OptionString(createCmd, "disk", "", "16G", "disk size")
 	OptionString(createCmd, "timezone", "", "UTC", "guest time zone")
-	OptionString(createCmd, "mac", "", "", "MAC address")
+	OptionString(createCmd, "mac", "", "auto", "MAC address")
 	OptionString(createCmd, "iso", "", "", "boot ISO pathname or URL")
 	OptionSwitch(createCmd, "detach-iso", "", "detach ISO at boot")
 	OptionSwitch(createCmd, "efi", "", "EFI boot")

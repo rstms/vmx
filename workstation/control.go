@@ -485,7 +485,7 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 		options.IsoFile = path
 	}
 
-	fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
+	//fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
 
 	// write vmx file
 	vmx, err := GenerateVMX(v.Remote, name, &options)
@@ -611,7 +611,7 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 
 func (v *vmctl) Start(vid string, options StartOptions) error {
 	if v.debug {
-		fmt.Printf("Start(%s, %+v)\n", vid, options)
+		log.Printf("Start(%s, %+v)\n", vid, options)
 	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
@@ -1237,7 +1237,7 @@ func (v *vmctl) copyFile(dstPath, srcPath string) error {
 
 func (v *vmctl) Download(vid, localPath, filename string) error {
 	if v.debug {
-		log.Printf("DownloadFile(%s, %s, %s)\n", vid, localPath, filename)
+		log.Printf("Download(%s, %s, %s)\n", vid, localPath, filename)
 	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
@@ -1336,7 +1336,9 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("getIpAddress: exitCode: %d\n", exitCode)
+	if v.debug {
+		log.Printf("getIpAddress: exitCode: %d\n", exitCode)
+	}
 	if len(olines) > 0 {
 		addr := olines[0]
 		if strings.HasPrefix(addr, "Error:") {
@@ -1378,7 +1380,7 @@ func (v *vmctl) getDisks(vm *VM) ([]VMDisk, bool, error) {
 		disks = append(disks, *disk)
 	}
 	if !found {
-		log.Printf("[%s] WARNING: no vmdk disks detected in vmx file", vm.Name)
+		fmt.Printf("[%s] WARNING: no vmdk disks detected in vmx file", vm.Name)
 	}
 	return disks, found, nil
 }
@@ -1447,8 +1449,49 @@ func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
 		}
 		_, err := v.exec(v.Shell, args, command, exitCode)
 		return err
+	case "sh":
+		return v.spawn("/bin/sh", command, exitCode)
+	case "cmd":
+		return v.spawn("cmd", command, exitCode)
 	}
 	return fmt.Errorf("unexpected shell: %s", v.Shell)
+}
+
+func (v *vmctl) spawn(shell, command string, exitCode *int) error {
+	if v.debug {
+		log.Printf("spawn('%s', %v)\n", command, exitCode)
+	}
+	stdin := ""
+	args := []string{}
+	if shell == "cmd" {
+		args = []string{"/c", fmt.Sprintf("start /MIN %s", command)}
+	} else {
+		stdin = command + "&"
+	}
+	cmd := exec.Command(shell, args...)
+	if len(stdin) > 0 {
+		cmd.Stdin = bytes.NewBuffer([]byte(stdin + "\n"))
+	} else {
+		cmd.Stdin = nil
+	}
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	err := cmd.Run()
+	switch e := err.(type) {
+	case nil:
+		if exitCode != nil {
+			*exitCode = 0
+		}
+	case *exec.ExitError:
+		if exitCode == nil {
+			err = fmt.Errorf("Process '%s' exited %d", cmd, e.ProcessState.ExitCode())
+		} else {
+			*exitCode = e.ProcessState.ExitCode()
+			log.Printf("WARNING: process '%s' exited %d\n", cmd, *exitCode)
+			err = nil
+		}
+	}
+	return nil
 }
 
 // note: if exitCode is nil, exit != 0 is an error, otherwise the exit code will be set
@@ -1505,12 +1548,12 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 
 func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	if v.debug {
-		fmt.Printf("Modify(%s, %+v)\n", vid, options)
+		log.Printf("Modify(%s, %+v)\n", vid, options)
 		out, err := FormatJSON(&options)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println(out)
+		log.Println(out)
 	}
 	actions := []string{}
 	vm, err := v.api.GetVM(vid)
@@ -1546,12 +1589,16 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	}
 
 	if options.ModifyISO {
-		fmt.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", options.IsoFile, v.IsoPath)
+		if v.debug {
+			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", options.IsoFile, v.IsoPath)
+		}
 		path := FormatIsoPathname(v.IsoPath, options.IsoFile)
 		if path == "" {
 			return nil, fmt.Errorf("failed formatting ISO pathname: %s", options.IsoFile)
 		}
-		fmt.Printf("normalized=%s\n", path)
+		if v.debug {
+			log.Printf("normalized=%s\n", path)
+		}
 		action, err := vmx.SetISO(options.IsoPresent, options.IsoBootConnected, path)
 		if err != nil {
 			return nil, err
@@ -1560,7 +1607,9 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	}
 
 	if options.ModifyTTY {
-		fmt.Printf("ModifyTTY: pipe=%s client=%v app=%v\n", options.SerialPipe, options.SerialClient, options.SerialAppMode)
+		if v.debug {
+			log.Printf("ModifyTTY: pipe=%s client=%v app=%v\n", options.SerialPipe, options.SerialClient, options.SerialAppMode)
+		}
 		action, err := vmx.SetSerial(options.SerialPipe, options.SerialClient, options.SerialAppMode)
 		if err != nil {
 			return nil, err
@@ -1585,7 +1634,9 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	}
 
 	if options.ModifyShare {
-		fmt.Printf("ModifyShare: host=%s guest=%s\n", options.SharedHostPath, options.SharedGuestPath)
+		if v.debug {
+			log.Printf("ModifyShare: host=%s guest=%s\n", options.SharedHostPath, options.SharedGuestPath)
+		}
 		action, err := vmx.SetShare(options.SharedHostPath, options.SharedGuestPath)
 		if err != nil {
 			return nil, err
