@@ -35,7 +35,7 @@ import (
 )
 
 var sendkeysCmd = &cobra.Command{
-	Use: "sendkeys VID KEYS",
+	Use:   "sendkeys VID KEYS",
 	Short: "send keystrokes to the instance",
 	Long: `
 Translate the KEYS argument into HID scan codes and send the result to the
@@ -49,7 +49,6 @@ backslash escapes such as \n are decoded.
 Examples:
 vmx sendkeys testvm 'This has a \x27quoted\x27 elements\n'
 vmx sendkeys testvm 'This has a \"double-quoted\" element\n'
-vmx sendkeys testvm 'This has a `backquoted` element.\n'
 vmx sendkeys testvm 'echo $PATH\n'
 `,
 	Args: cobra.ExactArgs(2),
