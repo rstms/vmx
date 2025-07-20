@@ -31,7 +31,6 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -62,11 +61,14 @@ unless specified with option flags.
 		options.GuestTimeZone = viper.GetString("timezone")
 		options.DisableDragAndDrop = !viper.GetBool("drag_and_drop")
 		options.DisableClipboard = !viper.GetBool("clipboard")
-		options.DisableFilesystemShare = !viper.GetBool("filesystem_share")
 		options.MacAddress = viper.GetString("mac")
 		options.IsoFile = viper.GetString("iso")
 		options.IsoPresent = options.IsoFile != ""
 		options.IsoBootConnected = !viper.GetBool("detach_iso")
+		options.IsoCA = viper.GetString("iso_ca")
+		options.IsoClientCert = viper.GetString("iso_cert")
+		options.IsoClientKey = viper.GetString("iso_key")
+
 		switch {
 		case viper.GetBool("openbsd"):
 			options.GuestOS = "openbsd"
@@ -79,12 +81,10 @@ unless specified with option flags.
 		default:
 			options.GuestOS = "other"
 		}
-		fmt.Printf("cmd/Create: viper.GetString(iso)=%s\n", viper.GetString("iso"))
-		fmt.Printf("cmd/Create: options.IsoFile=%s\n", options.IsoFile)
 		vm, err := vmx.Create(name, *options)
 		cobra.CheckErr(err)
-		if viper.GetBool("verbose") {
-			fmt.Println(vm)
+		if OutputJSON {
+			OutputInstanceState(vm.Name)
 		}
 	},
 }
@@ -102,11 +102,13 @@ func init() {
 	OptionSwitch(createCmd, "time-sync", "", "enable time sync with host")
 	OptionSwitch(createCmd, "drag-and-drop", "", "enable drag-and-drop")
 	OptionSwitch(createCmd, "clipboard", "", "enable clipboard sharing with host")
-	OptionSwitch(createCmd, "filesystem-share", "", "enable host/guest filesystem sharing")
 	OptionSwitch(createCmd, "single-file", "", "create single-file VMDK disk")
 	OptionSwitch(createCmd, "preallocated", "", "pre-allocate VMDK disk")
 	OptionSwitch(createCmd, "openbsd", "", "OpenBSD guest")
 	OptionSwitch(createCmd, "debian", "", "Debian guest")
 	OptionSwitch(createCmd, "ubuntu", "", "Ubuntu guest")
 	OptionSwitch(createCmd, "windows", "", "Windows guest")
+	OptionString(createCmd, "iso-ca", "", "", "CA for ISO URL download")
+	OptionString(createCmd, "iso-cert", "", "", "client certificate for ISO URL download")
+	OptionString(createCmd, "iso-key", "", "", "client cert key for ISO URL download")
 }

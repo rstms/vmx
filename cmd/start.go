@@ -31,6 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -61,6 +62,9 @@ to quickly create a Cobra application.`,
 		}
 		err := vmx.Start(vid, options)
 		cobra.CheckErr(err)
+		if OutputJSON {
+			OutputInstanceState(vid)
+		}
 	},
 }
 
@@ -70,4 +74,10 @@ func init() {
 	OptionSwitch(startCmd, "no-stretch", "", "disable stretched display")
 	OptionSwitch(startCmd, "background", "", "start in background mode")
 	OptionSwitch(startCmd, "fullscreen", "", "start in full-screen mode")
+}
+
+func OutputInstanceState(vid string) {
+	state, err := vmx.GetProperty(vid, "state")
+	cobra.CheckErr(err)
+	fmt.Println(state)
 }

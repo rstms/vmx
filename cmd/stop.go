@@ -55,6 +55,9 @@ to quickly create a Cobra application.`,
 		}
 		err := vmx.Stop(vid, options)
 		cobra.CheckErr(err)
+		if OutputJSON {
+			OutputInstanceState(vid)
+		}
 	},
 }
 

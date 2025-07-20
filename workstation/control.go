@@ -88,6 +88,9 @@ type CreateOptions struct {
 	IsoPresent             bool
 	IsoFile                string
 	IsoBootConnected       bool
+	IsoCA                  string
+	IsoClientCert          string
+	IsoClientKey           string
 	SerialPipe             string
 	SerialClient           bool
 	SerialAppMode          bool
@@ -469,6 +472,15 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 			return vm, err
 		}
 		fmt.Printf("[%s] create options: %s\n", name, ostr)
+	}
+
+	// If IsoFile is a URL, download it
+	if strings.HasPrefix(options.IsoFile, "http:") || strings.HasPrefix(options.IsoFile, "https:") {
+		isoFile, err := v.DownloadISO(options.IsoFile, options.IsoClientCert, options.IsoClientKey, options.IsoCA)
+		if err != nil {
+			return vm, err
+		}
+		options.IsoFile = isoFile
 	}
 
 	vm.Name = name
@@ -1348,7 +1360,6 @@ func (v *vmctl) getMacAddress(vm *VM) error {
 		return err
 	}
 	value = strings.Trim(value, `"`)
-	fmt.Printf("macAddress=%s\n", value)
 	vm.MacAddress = value
 	return nil
 }
