@@ -26,10 +26,13 @@ type VID struct {
 	Name string
 }
 
-type VMState struct {
-	Name       string `json:"name"`
-	PowerState string `json: "power_state"`
-	IpAddress  string `json: ip"`
+type VMStatus struct {
+	Name       string
+	Path       string
+	Id         string
+	MacAddress string
+	IpAddress  string
+	PowerState string
 }
 
 type VMFile struct {
@@ -920,20 +923,19 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return value, nil
 
 	case "state", "status":
-		err := v.api.GetState(&vm)
+		err = v.queryVM(&vm, QueryTypeState)
 		if err != nil {
 			return "", err
 		}
-		err = v.getIpAddress(&vm)
-		if err != nil {
-			return "", err
-		}
-		state := VMState{
+		status := VMStatus{
 			Name:       vm.Name,
-			PowerState: vm.PowerState,
+			Path:       vm.Path,
+			Id:         vm.Id,
+			MacAddress: vm.MacAddress,
 			IpAddress:  vm.IpAddress,
+			PowerState: vm.PowerState,
 		}
-		ret, err := FormatJSON(state)
+		ret, err := FormatJSON(status)
 		if err != nil {
 			return "", err
 		}
@@ -1000,6 +1002,10 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 			return err
 		}
 		err = v.getIpAddress(vm)
+		if err != nil {
+			return err
+		}
+		err = v.getMacAddress(vm)
 		if err != nil {
 			return err
 		}
@@ -1326,6 +1332,25 @@ func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
 	args := []string{"-i", v.KeyFile, localPath, remoteTarget}
 	_, err = v.exec("scp", args, "", nil)
 	return err
+}
+
+func (v *vmctl) getMacAddress(vm *VM) error {
+	macType, err := v.api.GetParam(vm, "ethernet0.addressType")
+	if err != nil {
+		return err
+	}
+	macParam := "ethernet0.generatedAddress"
+	if macType == "static" {
+		macParam = "ethernet0.address"
+	}
+	value, err := v.api.GetParam(vm, macParam)
+	if err != nil {
+		return err
+	}
+	value = strings.Trim(value, `"`)
+	fmt.Printf("macAddress=%s\n", value)
+	vm.MacAddress = value
+	return nil
 }
 
 func (v *vmctl) getIpAddress(vm *VM) error {
