@@ -62,6 +62,12 @@ to quickly create a Cobra application.`,
 			}
 			err := vmx.Destroy(vm.Id, options)
 			cobra.CheckErr(err)
+
+			if OutputJSON {
+				// we can't call OutputInstanceState, so build the status here
+				status := workstation.VMState{Name: vm.Name, Id: vm.Id, Result: "vm_destroyed"}
+				fmt.Println(FormatJSON(&status))
+			}
 		}
 	},
 }

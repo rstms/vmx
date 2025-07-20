@@ -31,6 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/user"
@@ -61,11 +62,16 @@ var rootCmd = &cobra.Command{
 Control VMWare Workstation instances
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		OutputText = true
-		OutputJSON = false
-		if viper.GetBool("json") {
-			OutputText = false
-			OutputJSON = true
+		OutputJSON = true
+		OutputText = false
+		if viper.GetBool("text") {
+			OutputText = true
+			OutputJSON = false
+		}
+		if viper.GetBool("no_wait") {
+			viper.Set("wait", false)
+		} else {
+			viper.Set("wait", true)
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -92,6 +98,7 @@ func init() {
 	OptionString(rootCmd, "interval", "i", "1", "wait query interval in seconds")
 	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
 	OptionSwitch(rootCmd, "json", "", "format output as JSON")
+	OptionSwitch(rootCmd, "text", "", "format output as text")
 	hostname, err := os.Hostname()
 	cobra.CheckErr(err)
 	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
@@ -103,7 +110,15 @@ func init() {
 	OptionSwitch(rootCmd, "long", "l", "add output detail")
 	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for expected powerState after start/stop/kill")
 	OptionSwitch(rootCmd, "wait", "w", "wait for expected powerState after start/stop/kill")
+
+	OptionString(rootCmd, "iso", "", "", "CD/DVD ISO boot file or URL")
+	OptionString(rootCmd, "iso-ca", "", "", "CA for ISO URL download")
+	OptionString(rootCmd, "iso-cert", "", "", "client certificate for ISO URL download")
+	OptionString(rootCmd, "iso-key", "", "", "client cert key for ISO URL download")
+	OptionSwitch(rootCmd, "iso-detach", "", "set CD/DVD detached at boot")
+	OptionSwitch(rootCmd, "iso-disable", "", "remove the CD/DVD ISO device")
 }
+
 func InitController() {
 	c, err := workstation.NewController()
 	cobra.CheckErr(err)
@@ -111,4 +126,39 @@ func InitController() {
 		log.Printf("Controller: %s\n", FormatJSON(c))
 	}
 	vmx = c
+}
+
+func OutputInstanceState(vid, result string) {
+	state, err := vmx.GetStatus(vid)
+	cobra.CheckErr(err)
+	state.Result = result
+	fmt.Println(FormatJSON(&state))
+}
+
+func InitIsoOptions() (*workstation.IsoOptions, error) {
+
+	options := workstation.IsoOptions{}
+	iso := viper.GetString("iso")
+	disable := viper.GetBool("iso_disable")
+	if (iso != "") && disable {
+		return nil, fmt.Errorf("conflict: iso/iso-disable")
+	}
+	switch {
+	case iso != "":
+		options.ModifyISO = true
+		options.IsoPresent = true
+		options.IsoFile = iso
+		options.IsoBootConnected = true
+		options.IsoCA = viper.GetString("iso_ca")
+		options.IsoClientCert = viper.GetString("iso_cert")
+		options.IsoClientKey = viper.GetString("iso_key")
+	case disable:
+		options.ModifyISO = true
+		options.IsoPresent = false
+	}
+	if viper.GetBool("iso_detach") {
+		options.ModifyISO = true
+		options.IsoBootConnected = false
+	}
+	return &options, nil
 }

@@ -26,13 +26,14 @@ type VID struct {
 	Name string
 }
 
-type VMStatus struct {
+type VMState struct {
 	Name       string
 	Path       string
 	Id         string
 	MacAddress string
 	IpAddress  string
 	PowerState string
+	Result     string
 }
 
 type VMFile struct {
@@ -86,11 +87,6 @@ type CreateOptions struct {
 	DisableFilesystemShare bool
 	MacAddress             string
 	IsoPresent             bool
-	IsoFile                string
-	IsoBootConnected       bool
-	IsoCA                  string
-	IsoClientCert          string
-	IsoClientKey           string
 	SerialPipe             string
 	SerialClient           bool
 	SerialAppMode          bool
@@ -99,11 +95,11 @@ type CreateOptions struct {
 	SharedHostPath         string
 	SharedGuestPath        string
 	ModifyNIC              bool
-	ModifyISO              bool
 	ModifyTTY              bool
 	ModifyVNC              bool
 	ModifyEFI              bool
 	ModifyShare            bool
+	Wait                   bool
 }
 
 func NewCreateOptions() *CreateOptions {
@@ -163,12 +159,13 @@ const (
 )
 
 type Controller interface {
-	Show(string, ShowOptions) ([]VM, error)
-	Create(string, CreateOptions) (VM, error)
-	Destroy(string, DestroyOptions) error
-	Start(string, StartOptions) error
-	Stop(string, StopOptions) error
+	Create(string, CreateOptions, IsoOptions) (VM, error)
 	Get(string) (VM, error)
+	Modify(string, CreateOptions, IsoOptions) (*[]string, error)
+	Start(string, StartOptions, IsoOptions) error
+	Stop(string, StopOptions) error
+	Destroy(string, DestroyOptions) error
+	Show(string, ShowOptions) ([]VM, error)
 	GetProperty(string, string) (string, error)
 	SetProperty(string, string, string) error
 	LocalExec(string, *int) ([]string, error)
@@ -178,9 +175,9 @@ type Controller interface {
 	Download(string, string, string) error
 	Files(string, FilesOptions) ([]string, []VMFile, error)
 	Wait(string, string) error
-	Modify(string, CreateOptions) (*[]string, error)
 	SendKeys(string, string) error
 	Close() error
+	GetStatus(string) (*VMState, error)
 }
 
 type vmctl struct {
@@ -452,7 +449,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 	return vms, nil
 }
 
-func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
+func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions) (VM, error) {
 	var vm VM
 
 	if v.debug {
@@ -474,15 +471,6 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 		fmt.Printf("[%s] create options: %s\n", name, ostr)
 	}
 
-	// If IsoFile is a URL, download it
-	if strings.HasPrefix(options.IsoFile, "http:") || strings.HasPrefix(options.IsoFile, "https:") {
-		isoFile, err := v.DownloadISO(options.IsoFile, options.IsoClientCert, options.IsoClientKey, options.IsoCA)
-		if err != nil {
-			return vm, err
-		}
-		options.IsoFile = isoFile
-	}
-
 	vm.Name = name
 	vm.Path = filepath.Join(viper.GetString("vmware_path"), name, name+".vmx")
 
@@ -497,18 +485,18 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 		return vm, err
 	}
 
-	if options.IsoFile != "" {
-		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, options.IsoFile))
+	if isoOptions.IsoFile != "" {
+		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, isoOptions.IsoFile))
 		if err != nil {
 			return vm, err
 		}
-		options.IsoFile = path
+		isoOptions.IsoFile = path
 	}
 
 	//fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
 
 	// write vmx file
-	vmx, err := GenerateVMX(v.Remote, name, &options)
+	vmx, err := GenerateVMX(v.Remote, name, &options, &isoOptions)
 	if err != nil {
 		return vm, err
 	}
@@ -548,6 +536,23 @@ func (v *vmctl) Create(name string, options CreateOptions) (VM, error) {
 	}
 	if v.verbose {
 		fmt.Printf("[%s] %s\n", name, result)
+	}
+
+	if options.Wait {
+		err := v.Wait(name, "poweredOff")
+		if err != nil {
+			return vm, err
+		}
+
+		err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
+		if err != nil {
+			return vm, err
+		}
+		err = v.Stop(name, StopOptions{Wait: true})
+		if err != nil {
+			return vm, err
+		}
+
 	}
 
 	return vm, nil
@@ -629,7 +634,7 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 	return false, nil
 }
 
-func (v *vmctl) Start(vid string, options StartOptions) error {
+func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) error {
 	if v.debug {
 		log.Printf("Start(%s, %+v)\n", vid, options)
 	}
@@ -643,6 +648,13 @@ func (v *vmctl) Start(vid string, options StartOptions) error {
 	}
 	if ok {
 		return nil
+	}
+
+	if isoOptions.ModifyISO {
+		_, err := v.Modify(vid, CreateOptions{}, isoOptions)
+		if err != nil {
+			return err
+		}
 	}
 
 	path, err := PathFormat(v.Remote, vm.Path)
@@ -869,6 +881,28 @@ func (v *vmctl) Get(vid string) (VM, error) {
 	return vm, nil
 }
 
+func (v *vmctl) GetStatus(vid string) (*VMState, error) {
+
+	vm, err := v.Get(vid)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.queryVM(&vm, QueryTypeState)
+	if err != nil {
+		return nil, err
+	}
+	state := VMState{
+		Name:       vm.Name,
+		Path:       vm.Path,
+		Id:         vm.Id,
+		MacAddress: vm.MacAddress,
+		IpAddress:  vm.IpAddress,
+		PowerState: vm.PowerState,
+	}
+	return &state, nil
+}
+
 func (v *vmctl) GetProperty(vid, property string) (string, error) {
 	if v.verbose {
 		log.Printf("GetProperty(%s, %s)\n", vid, property)
@@ -935,19 +969,11 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return value, nil
 
 	case "state", "status":
-		err = v.queryVM(&vm, QueryTypeState)
+		state, err := v.GetStatus(vid)
 		if err != nil {
 			return "", err
 		}
-		status := VMStatus{
-			Name:       vm.Name,
-			Path:       vm.Path,
-			Id:         vm.Id,
-			MacAddress: vm.MacAddress,
-			IpAddress:  vm.IpAddress,
-			PowerState: vm.PowerState,
-		}
-		ret, err := FormatJSON(status)
+		ret, err := FormatJSON(state)
 		if err != nil {
 			return "", err
 		}
@@ -1587,14 +1613,19 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 	return olines, err
 }
 
-func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
+func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions) (*[]string, error) {
 	if v.debug {
-		log.Printf("Modify(%s, %+v)\n", vid, options)
+		log.Printf("Modify(%s, %+v, %+v)\n", vid, options, isoOptions)
 		out, err := FormatJSON(&options)
 		if err != nil {
 			return nil, err
 		}
-		log.Println(out)
+		log.Printf("CreateOptions: %s\n", out)
+		out, err = FormatJSON(&isoOptions)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("IsoOptions: %s\n", out)
 	}
 	actions := []string{}
 	vm, err := v.api.GetVM(vid)
@@ -1612,7 +1643,7 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	vmx, err := GenerateVMX(v.Remote, vm.Name, NewCreateOptions())
+	vmx, err := GenerateVMX(v.Remote, vm.Name, NewCreateOptions(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1629,18 +1660,19 @@ func (v *vmctl) Modify(vid string, options CreateOptions) (*[]string, error) {
 		actions = append(actions, action)
 	}
 
-	if options.ModifyISO {
+	if isoOptions.ModifyISO {
 		if v.debug {
-			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", options.IsoFile, v.IsoPath)
+			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", isoOptions.IsoFile, v.IsoPath)
 		}
-		path := FormatIsoPathname(v.IsoPath, options.IsoFile)
+
+		path := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
 		if path == "" {
-			return nil, fmt.Errorf("failed formatting ISO pathname: %s", options.IsoFile)
+			return nil, fmt.Errorf("failed formatting ISO pathname: %s", isoOptions.IsoFile)
 		}
 		if v.debug {
 			log.Printf("normalized=%s\n", path)
 		}
-		action, err := vmx.SetISO(options.IsoPresent, options.IsoBootConnected, path)
+		action, err := vmx.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, path)
 		if err != nil {
 			return nil, err
 		}

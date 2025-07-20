@@ -60,136 +60,25 @@ Changes can be specified for multiple categories in a single command.
 
 		options := workstation.CreateOptions{}
 
-		ethEnable := viper.GetBool("eth_enable")
-		ethAuto := viper.GetBool("eth_auto")
-		if ethAuto {
-			ethEnable = true
-		}
-		ethDisable := viper.GetBool("eth_disable")
-		ethAddress := viper.GetString("eth_mac")
-		if ethAddress != "" {
-			ethEnable = true
-		}
-		if ethAuto && ethAddress != "" {
-			err := fmt.Errorf("conflict: eth_auto/eth_mac")
-			cobra.CheckErr(err)
-		}
-		if ethEnable && ethDisable {
-			err := fmt.Errorf("conflict: eth_enable/eth_disable")
-			cobra.CheckErr(err)
-		}
-		switch {
-		case ethEnable:
-			options.ModifyNIC = true
-			options.MacAddress = ethAddress
-			if options.MacAddress == "" {
-				options.MacAddress = "auto"
-			}
-		case ethDisable:
-			options.ModifyNIC = true
-		}
+		err = initETHOptions(&options)
+		cobra.CheckErr(err)
 
-		isoAttached := viper.GetString("iso_attach")
-		isoDetached := viper.GetString("iso_detach")
-		isoDisable := viper.GetBool("iso_disable")
-		if isoAttached != "" && isoDetached != "" {
-			err := fmt.Errorf("conflict: iso/iso-detached")
-			cobra.CheckErr(err)
-		}
-		if (isoAttached != "" || isoDetached != "") && isoDisable {
-			err := fmt.Errorf("conflict: iso enable/disable")
-			cobra.CheckErr(err)
-		}
+		err = initTTYOptions(&options)
+		cobra.CheckErr(err)
 
-		switch {
-		case isoAttached != "":
-			options.ModifyISO = true
-			options.IsoPresent = true
-			options.IsoFile = isoAttached
-			options.IsoBootConnected = true
-		case isoDetached != "":
-			options.ModifyISO = true
-			options.IsoPresent = true
-			options.IsoBootConnected = false
-			options.IsoFile = isoDetached
-			options.IsoBootConnected = false
-		case isoDisable:
-			options.ModifyISO = true
-		}
+		err = initVNCOptions(&options)
+		cobra.CheckErr(err)
 
-		ttyPipe := viper.GetString("tty_pipe")
-		ttyDisable := viper.GetBool("tty_disable")
-		if (ttyPipe != "") && ttyDisable {
-			err := fmt.Errorf("conflict: tty pipe/disable")
-			cobra.CheckErr(err)
-		}
-		ttyClient := viper.GetBool("tty_client")
-		ttyAppMode := viper.GetBool("tty_app_mode")
+		err = initEFIOptions(&options)
+		cobra.CheckErr(err)
 
-		if ttyDisable && (ttyClient || ttyAppMode) {
-			err := fmt.Errorf("conflict: tty disable/client|app_mode")
-			cobra.CheckErr(err)
-		}
-		switch {
-		case ttyPipe != "":
-			options.ModifyTTY = true
-			options.SerialPipe = ttyPipe
-			options.SerialClient = ttyClient
-			options.SerialAppMode = ttyAppMode
-		case viper.GetBool("tty_disable"):
-			options.ModifyTTY = true
-		}
+		err = initShareOptions(&options)
+		cobra.CheckErr(err)
 
-		vncEnable := viper.GetBool("vnc_enable")
-		vncDisable := viper.GetBool("vnc_disable")
-		if vncEnable && vncDisable {
-			err := fmt.Errorf("conflict: vnc enable/disable")
-			cobra.CheckErr(err)
-		}
-		switch {
-		case vncEnable:
-			options.ModifyVNC = true
-			options.VNCEnabled = true
-			options.VNCPort = viper.GetInt("vnc_port")
-		case vncDisable:
-			options.ModifyVNC = true
-		}
+		isoOptions, err := InitIsoOptions()
+		cobra.CheckErr(err)
 
-		bootEFI := viper.GetBool("boot_efi")
-		bootBIOS := viper.GetBool("boot_bios")
-		if bootEFI && bootBIOS {
-			err := fmt.Errorf("conflict: EFI/BIOS")
-			cobra.CheckErr(err)
-		}
-		switch {
-		case bootEFI:
-			options.ModifyEFI = true
-			options.EFIBoot = true
-		case bootBIOS:
-			options.ModifyEFI = true
-		}
-
-		shareEnable := viper.GetString("share_enable")
-		shareDisable := viper.GetBool("share_disable")
-		if shareEnable != "" && shareDisable {
-			err := fmt.Errorf("conflict: share-enable/share-disable")
-			cobra.CheckErr(err)
-		}
-		switch {
-		case shareEnable != "":
-			options.ModifyShare = true
-			host, guest, ok := strings.Cut(shareEnable, ",")
-			if !ok || host == "" || guest == "" {
-				err := fmt.Errorf("share-enable path format (host_path,guest_path): '%s'", shareEnable)
-				cobra.CheckErr(err)
-			}
-			options.SharedHostPath = host
-			options.SharedGuestPath = guest
-		case shareDisable:
-			options.ModifyShare = true
-		}
-
-		actions, err := vmx.Modify(vm.Name, options)
+		actions, err := vmx.Modify(vm.Name, options, *isoOptions)
 		cobra.CheckErr(err)
 		if OutputJSON {
 			output := make(map[string]any)
@@ -205,16 +94,121 @@ Changes can be specified for multiple categories in a single command.
 	},
 }
 
+func initETHOptions(options *workstation.CreateOptions) error {
+	ethEnable := viper.GetBool("eth_enable")
+	ethAuto := viper.GetBool("eth_auto")
+	if ethAuto {
+		ethEnable = true
+	}
+	ethDisable := viper.GetBool("eth_disable")
+	ethAddress := viper.GetString("eth_mac")
+	if ethAddress != "" {
+		ethEnable = true
+	}
+	if ethAuto && ethAddress != "" {
+		return fmt.Errorf("conflict: eth_auto/eth_mac")
+	}
+	if ethEnable && ethDisable {
+		return fmt.Errorf("conflict: eth_enable/eth_disable")
+	}
+	switch {
+	case ethEnable:
+		options.ModifyNIC = true
+		options.MacAddress = ethAddress
+		if options.MacAddress == "" {
+			options.MacAddress = "auto"
+		}
+	case ethDisable:
+		options.ModifyNIC = true
+	}
+	return nil
+}
+
+func initTTYOptions(options *workstation.CreateOptions) error {
+
+	ttyPipe := viper.GetString("tty_pipe")
+	ttyDisable := viper.GetBool("tty_disable")
+	if (ttyPipe != "") && ttyDisable {
+		return fmt.Errorf("conflict: tty pipe/disable")
+	}
+	ttyClient := viper.GetBool("tty_client")
+	ttyAppMode := viper.GetBool("tty_app_mode")
+
+	if ttyDisable && (ttyClient || ttyAppMode) {
+		return fmt.Errorf("conflict: tty disable/client|app_mode")
+	}
+	switch {
+	case ttyPipe != "":
+		options.ModifyTTY = true
+		options.SerialPipe = ttyPipe
+		options.SerialClient = ttyClient
+		options.SerialAppMode = ttyAppMode
+	case viper.GetBool("tty_disable"):
+		options.ModifyTTY = true
+	}
+	return nil
+}
+
+func initVNCOptions(options *workstation.CreateOptions) error {
+	vncEnable := viper.GetBool("vnc_enable")
+	vncDisable := viper.GetBool("vnc_disable")
+	if vncEnable && vncDisable {
+		return fmt.Errorf("conflict: vnc enable/disable")
+	}
+	switch {
+	case vncEnable:
+		options.ModifyVNC = true
+		options.VNCEnabled = true
+		options.VNCPort = viper.GetInt("vnc_port")
+	case vncDisable:
+		options.ModifyVNC = true
+	}
+	return nil
+}
+
+func initEFIOptions(options *workstation.CreateOptions) error {
+	bootEFI := viper.GetBool("boot_efi")
+	bootBIOS := viper.GetBool("boot_bios")
+	if bootEFI && bootBIOS {
+		return fmt.Errorf("conflict: EFI/BIOS")
+	}
+	switch {
+	case bootEFI:
+		options.ModifyEFI = true
+		options.EFIBoot = true
+	case bootBIOS:
+		options.ModifyEFI = true
+	}
+	return nil
+}
+
+func initShareOptions(options *workstation.CreateOptions) error {
+	shareEnable := viper.GetString("share_enable")
+	shareDisable := viper.GetBool("share_disable")
+	if shareEnable != "" && shareDisable {
+		return fmt.Errorf("conflict: share-enable/share-disable")
+	}
+	switch {
+	case shareEnable != "":
+		options.ModifyShare = true
+		host, guest, ok := strings.Cut(shareEnable, ",")
+		if !ok || host == "" || guest == "" {
+			return fmt.Errorf("share-enable path format (host_path,guest_path): '%s'", shareEnable)
+		}
+		options.SharedHostPath = host
+		options.SharedGuestPath = guest
+	case shareDisable:
+		options.ModifyShare = true
+	}
+	return nil
+}
+
 func init() {
 	rootCmd.AddCommand(modifyCmd)
 	OptionSwitch(modifyCmd, "eth-enable", "", "configure ethernet NIC")
 	OptionSwitch(modifyCmd, "eth-disable", "", "remove the ethernet NIC")
 	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet with user-defined MAC address")
 	OptionString(modifyCmd, "eth-auto", "", "", "enable ethernet with auto-generated MAC address")
-
-	OptionString(modifyCmd, "iso-attach", "", "", "CD/DVD ISO boot file")
-	OptionString(modifyCmd, "iso-detach", "", "", "CD/DVD ISO file (detached at boot)")
-	OptionSwitch(modifyCmd, "iso-disable", "", "disable CD/DVD ISO")
 
 	OptionSwitch(modifyCmd, "vnc-enable", "", "enable the integrated VNC server")
 	OptionSwitch(modifyCmd, "vnc-disable", "", "disable and remove VNC")

@@ -51,6 +51,7 @@ unless specified with option flags.
 
 		options := workstation.NewCreateOptions()
 
+		options.Wait = viper.GetBool("wait")
 		options.CpuCount = viper.GetInt("cpu")
 		options.MemorySize = viper.GetString("ram")
 		options.DiskSize = viper.GetString("disk")
@@ -62,12 +63,6 @@ unless specified with option flags.
 		options.DisableDragAndDrop = !viper.GetBool("drag_and_drop")
 		options.DisableClipboard = !viper.GetBool("clipboard")
 		options.MacAddress = viper.GetString("mac")
-		options.IsoFile = viper.GetString("iso")
-		options.IsoPresent = options.IsoFile != ""
-		options.IsoBootConnected = !viper.GetBool("detach_iso")
-		options.IsoCA = viper.GetString("iso_ca")
-		options.IsoClientCert = viper.GetString("iso_cert")
-		options.IsoClientKey = viper.GetString("iso_key")
 
 		switch {
 		case viper.GetBool("openbsd"):
@@ -81,10 +76,14 @@ unless specified with option flags.
 		default:
 			options.GuestOS = "other"
 		}
-		vm, err := vmx.Create(name, *options)
+
+		isoOptions, err := InitIsoOptions()
 		cobra.CheckErr(err)
-		if OutputJSON {
-			OutputInstanceState(vm.Name)
+
+		vm, err := vmx.Create(name, *options, *isoOptions)
+		cobra.CheckErr(err)
+		if OutputJSON && options.Wait {
+			OutputInstanceState(vm.Name, "vm_created")
 		}
 	},
 }
@@ -108,7 +107,4 @@ func init() {
 	OptionSwitch(createCmd, "debian", "", "Debian guest")
 	OptionSwitch(createCmd, "ubuntu", "", "Ubuntu guest")
 	OptionSwitch(createCmd, "windows", "", "Windows guest")
-	OptionString(createCmd, "iso-ca", "", "", "CA for ISO URL download")
-	OptionString(createCmd, "iso-cert", "", "", "client certificate for ISO URL download")
-	OptionString(createCmd, "iso-key", "", "", "client cert key for ISO URL download")
 }

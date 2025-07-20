@@ -50,13 +50,13 @@ to quickly create a Cobra application.`,
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     !viper.GetBool("no_wait"),
+			Wait:     !viper.GetBool("wait"),
 			PowerOff: viper.GetBool("poweroff"),
 		}
 		err := vmx.Stop(vid, options)
 		cobra.CheckErr(err)
-		if OutputJSON {
-			OutputInstanceState(vid)
+		if OutputJSON && options.Wait {
+			OutputInstanceState(vid, "vm_shutdown")
 		}
 	},
 }

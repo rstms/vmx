@@ -41,16 +41,20 @@ var killCmd = &cobra.Command{
 	Short: "kill a VM instance",
 	Long: `Force stop a VM instance with a hard power off
 `,
-	Args: cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
+	Aliases: []string{"poweroff"},
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     !viper.GetBool("no_wait"),
+			Wait:     viper.GetBool("wait"),
 			PowerOff: true,
 		}
 		err := vmx.Stop(vid, options)
 		cobra.CheckErr(err)
+		if OutputJSON {
+			OutputInstanceState(vid, "vm_shutdown")
+		}
 	},
 }
 

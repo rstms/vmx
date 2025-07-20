@@ -62,7 +62,7 @@ list format.  Use --long for a long listing.
 		}
 		lines, files, err := vmx.Files(vid, options)
 		cobra.CheckErr(err)
-		if viper.GetBool("json") {
+		if OutputJSON {
 			if viper.GetBool("long") {
 				fmt.Println(FormatJSON(files))
 			} else {

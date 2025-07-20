@@ -73,7 +73,7 @@ type VMX struct {
 	verbose bool
 }
 
-func GenerateVMX(os, name string, options *CreateOptions) (*VMX, error) {
+func GenerateVMX(os, name string, options *CreateOptions, isoOptions *IsoOptions) (*VMX, error) {
 
 	vmx := VMX{
 		name:    name,
@@ -82,7 +82,7 @@ func GenerateVMX(os, name string, options *CreateOptions) (*VMX, error) {
 		verbose: viper.GetBool("verbose"),
 	}
 
-	err := vmx.Generate(options)
+	err := vmx.Generate(options, isoOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func getGuestOS(key string) (string, error) {
 	return "", fmt.Errorf("unexpected GuestOS: %s", key)
 }
 
-func (v *VMX) Generate(options *CreateOptions) error {
+func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) error {
 
 	size, err := SizeParse(options.MemorySize)
 	if err != nil {
@@ -129,10 +129,12 @@ func (v *VMX) Generate(options *CreateOptions) error {
 	if err != nil {
 		return err
 	}
-	_, err = v.SetISO(options.IsoFile != "", options.IsoBootConnected, options.IsoFile)
 
-	if err != nil {
-		return err
+	if isoOptions != nil {
+		_, err = v.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoOptions.IsoFile)
+		if err != nil {
+			return err
+		}
 	}
 	_, err = v.SetEthernet(options.MacAddress)
 	if err != nil {

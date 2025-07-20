@@ -3,9 +3,36 @@ package workstation
 import (
 	"fmt"
 	"path"
+	"strings"
 )
 
-func (v *vmctl) DownloadISO(url, cert, key, ca string) (string, error) {
+type IsoOptions struct {
+	ModifyISO        bool
+	IsoPresent       bool
+	IsoFile          string
+	IsoCA            string
+	IsoClientCert    string
+	IsoClientKey     string
+	IsoBootConnected bool
+}
+
+func (v *vmctl) CheckISODownload(options *IsoOptions) error {
+
+	if !options.ModifyISO {
+		return nil
+	}
+	// if IsoFile is a URL, download the ISO
+	if strings.HasPrefix(options.IsoFile, "http:") || strings.HasPrefix(options.IsoFile, "https:") {
+		filename, err := v.downloadISO(options.IsoFile, options.IsoClientCert, options.IsoClientKey, options.IsoCA)
+		if err != nil {
+			return err
+		}
+		options.IsoFile = filename
+	}
+	return nil
+}
+
+func (v *vmctl) downloadISO(url, cert, key, ca string) (string, error) {
 
 	_, basename := path.Split(url)
 	pathname := FormatIsoPathname(v.IsoPath, basename)
