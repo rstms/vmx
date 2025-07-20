@@ -7,11 +7,12 @@ windows != env | grep ^WINDIR=
 latest_release != gh release list --json tagName --jq '.[0].tagName' | tr -d v
 version != cat VERSION
 
-gitclean = if git status --porcelain | grep '^.*$$'; then echo git status is dirty; false; else echo git status is clean; true; fi
+#gitclean = if git status --porcelain | grep '^.*$$'; then echo git status is dirty; false; else echo git status is clean; true; fi
 
+gitclean = $(if $(shell git status --porcelain),$(error git status is dirty),$(info git status is clean))
 
 foo:
-	$(if $(shell git status --porcelain),$(error git status is dirty),$(info git status is clean))
+	$(gitclean)
 	@echo howdy
 
 install_dir = /usr/local/bin
