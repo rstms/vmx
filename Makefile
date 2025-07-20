@@ -11,7 +11,8 @@ gitclean = if git status --porcelain | grep '^.*$$'; then echo git status is dir
 
 
 foo:
-	git status --porcelain
+	$(if $(shell git status --porcelain),$(error git status is dirty),$(info git status is clean))
+	@echo howdy
 
 install_dir = /usr/local/bin
 postinstall =
