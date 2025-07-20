@@ -102,6 +102,7 @@ func init() {
 	OptionSwitch(rootCmd, "all", "a", "select all items")
 	OptionSwitch(rootCmd, "long", "l", "add output detail")
 	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for expected powerState after start/stop/kill")
+	OptionSwitch(rootCmd, "wait", "w", "wait for expected powerState after start/stop/kill")
 }
 func InitController() {
 	c, err := workstation.NewController()

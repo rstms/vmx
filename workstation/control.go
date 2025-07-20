@@ -377,9 +377,13 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, []VMFile, err
 			return lines, files, err
 		}
 	} else {
-		for _, line := range lines {
-			files = append(files, VMFile{Name: strings.TrimSpace(line)})
+		trimmed := make([]string, len(lines))
+		files = make([]VMFile, len(lines))
+		for i, line := range lines {
+			trimmed[i] = strings.TrimSpace(line)
+			files[i] = VMFile{Name: trimmed[i]}
 		}
+		lines = trimmed
 	}
 	return lines, files, nil
 }

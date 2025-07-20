@@ -1,6 +1,8 @@
 # go makefile
 
 program != basename $$(pwd)
+windows != env | grep ^WINDIR=
+
 
 latest_release != gh release list --json tagName --jq '.[0].tagName' | tr -d v
 version != cat VERSION
@@ -25,7 +27,7 @@ go.sum: go.mod
 	go mod tidy
 
 install: build
-	doas install -m 0755 $(program) $(install_dir)/$(program) $(postinstall)
+	$(if $(windows),go install,doas install -m 0755 $(program) $(install_dir)/$(program) $(postinstall))
 
 test: fmt
 	go test -v -failfast . ./...
