@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const Version = "0.0.19"
+const Version = "0.0.20"
 
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
 
