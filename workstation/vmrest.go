@@ -275,29 +275,6 @@ func (r *VMRestClient) GetConfig(vm *VM) error {
 	return nil
 }
 
-func (r *VMRestClient) GetState(vm *VM) error {
-	err := r.GetPowerState(vm)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *VMRestClient) GetPowerState(vm *VM) error {
-	var response VmRestGetPowerStateResponse
-	path := fmt.Sprintf("vms/%s/power", vm.Id)
-	_, err := r.api.Get(path, &response)
-	if err != nil {
-		return fmt.Errorf("GET %s request failed: %v\n", path, err)
-	}
-	if r.verbose {
-		LogJSON("VmRestGetPowerStateResponse", &response)
-	}
-	vm.PowerState = response.PowerState
-	vm.Running = vm.PowerState == "poweredOn"
-	return nil
-}
-
 func (r *VMRestClient) GetParam(vm *VM, name string) (string, error) {
 	var response map[string]any
 	path := fmt.Sprintf("vms/%s/params/%s", vm.Id, url.PathEscape(name))

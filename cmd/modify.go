@@ -47,7 +47,7 @@ var modifyCmd = &cobra.Command{
 vnc modify [FLAGS] VID
 
 Change instance NIC, ISO, TTY, VNC, EFI configuration parameters.  
-The instance must be in in the 'poweredOff' state.
+The instance must be powered off.
 
 See the flags and options help for descriptions of the available settings.
 Changes can be specified for multiple categories in a single command.

@@ -76,7 +76,7 @@ directory.
 		// verify VM is powered off
 		powerState, err := vmx.GetProperty(vm.Id, "power")
 		cobra.CheckErr(err)
-		if powerState != "poweredOff" {
+		if powerState != "off" {
 			err := fmt.Errorf("cannot edit in power state: %s", powerState)
 			cobra.CheckErr(err)
 		}

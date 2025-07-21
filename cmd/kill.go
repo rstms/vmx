@@ -50,10 +50,10 @@ var killCmd = &cobra.Command{
 			Wait:     viper.GetBool("wait"),
 			PowerOff: true,
 		}
-		err := vmx.Stop(vid, options)
+		result, err := vmx.Stop(vid, options)
 		cobra.CheckErr(err)
 		if OutputJSON {
-			OutputInstanceState(vid, "vm_shutdown")
+			OutputInstanceState(vid, result)
 		}
 	},
 }

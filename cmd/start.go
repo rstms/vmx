@@ -64,10 +64,10 @@ to quickly create a Cobra application.`,
 		isoOptions, err := InitIsoOptions()
 		cobra.CheckErr(err)
 
-		err = vmx.Start(vid, options, *isoOptions)
+		result, err := vmx.Start(vid, options, *isoOptions)
 		cobra.CheckErr(err)
-		if OutputJSON && options.Wait {
-			OutputInstanceState(vid, "vm_started")
+		if OutputJSON {
+			OutputInstanceState(vid, result)
 		}
 	},
 }

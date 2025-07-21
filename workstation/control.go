@@ -162,8 +162,8 @@ type Controller interface {
 	Create(string, CreateOptions, IsoOptions) (VM, error)
 	Get(string) (VM, error)
 	Modify(string, CreateOptions, IsoOptions) (*[]string, error)
-	Start(string, StartOptions, IsoOptions) error
-	Stop(string, StopOptions) error
+	Start(string, StartOptions, IsoOptions) (string, error)
+	Stop(string, StopOptions) (string, error)
 	Destroy(string, DestroyOptions) error
 	Show(string, ShowOptions) ([]VM, error)
 	GetProperty(string, string) (string, error)
@@ -189,6 +189,7 @@ type vmctl struct {
 	api      *VMRestClient
 	winexec  *WinExecClient
 	relay    *Relay
+	cli      *vmcli
 	Shell    string
 	Local    string
 	Remote   string
@@ -278,6 +279,8 @@ func NewController() (Controller, error) {
 		return nil, err
 	}
 	v.api = client
+
+	v.cli = NewCliClient(&v)
 
 	v.Local = runtime.GOOS
 	local, err := isLocal()
@@ -539,16 +542,16 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	if options.Wait {
-		err := v.Wait(name, "poweredOff")
+		err := v.Wait(name, "off")
 		if err != nil {
 			return vm, err
 		}
 
-		err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
+		_, err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
 		if err != nil {
 			return vm, err
 		}
-		err = v.Stop(name, StopOptions{Wait: true})
+		_, err = v.Stop(name, StopOptions{Wait: true})
 		if err != nil {
 			return vm, err
 		}
@@ -566,13 +569,13 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	if err != nil {
 		return err
 	}
-	err = v.api.GetPowerState(&vm)
+	err = v.cli.QueryPowerState(&vm)
 	if err != nil {
 		return err
 	}
-	if vm.PowerState != "poweredOff" {
+	if vm.PowerState != "off" {
 		if options.Force {
-			err := v.Stop(vid, StopOptions{PowerOff: true, Wait: true})
+			_, err := v.Stop(vid, StopOptions{PowerOff: true, Wait: true})
 			if err != nil {
 				return err
 			}
@@ -602,7 +605,7 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 }
 
 func (v *vmctl) requirePowerState(vm *VM, state, action string) error {
-	err := v.api.GetPowerState(vm)
+	err := v.cli.QueryPowerState(vm)
 	if err != nil {
 		return err
 	}
@@ -620,7 +623,7 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	err = v.api.GetPowerState(vm)
+	err = v.cli.QueryPowerState(vm)
 	if err != nil {
 		return false, err
 	}
@@ -634,32 +637,32 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 	return false, nil
 }
 
-func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) error {
+func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
 	if v.debug {
 		log.Printf("Start(%s, %+v)\n", vid, options)
 	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
-		return err
+		return "", err
 	}
-	ok, err := v.checkPowerState(&vm, "start", "poweredOn")
+	ok, err := v.checkPowerState(&vm, "start", "on")
 	if err != nil {
-		return err
+		return "", err
 	}
 	if ok {
-		return nil
+		return "already started", nil
 	}
 
 	if isoOptions.ModifyISO {
 		_, err := v.Modify(vid, CreateOptions{}, isoOptions)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	path, err := PathFormat(v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	command := ""
 	var visibility string
@@ -684,7 +687,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) e
 
 	err = v.setStretch(&vm)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if v.verbose {
@@ -693,19 +696,20 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) e
 
 	err = v.RemoteSpawn(command, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if v.verbose {
 		fmt.Printf("[%s] start request complete\n", vm.Name)
 	}
 
 	if options.Wait {
-		err := v.Wait(vid, "poweredOn")
+		err := v.Wait(vid, "on")
 		if err != nil {
-			return err
+			return "", err
 		}
+		return "started", nil
 	}
-	return nil
+	return "start pending", nil
 }
 
 func (v *vmctl) setStretch(vm *VM) error {
@@ -739,7 +743,7 @@ func (v *vmctl) validatePowerState(state string) error {
 		log.Printf("validatePowerState(%s)\n", state)
 	}
 	switch state {
-	case "poweredOn", "poweredOff", "paused", "suspended":
+	case "on", "off", "paused", "suspended":
 		return nil
 	default:
 		return fmt.Errorf("unknown power state: %s", state)
@@ -752,7 +756,7 @@ func (v *vmctl) queryPowerState(vid string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	err = v.api.GetPowerState(&vm)
+	err = v.cli.QueryPowerState(&vm)
 	if err != nil {
 		return "", err
 	}
@@ -765,9 +769,11 @@ func (v *vmctl) Wait(vid, state string) error {
 	}
 	switch strings.ToLower(state) {
 	case "up", "on", "running":
-		state = "poweredOn"
+		state = "on"
 	case "down", "off", "stopped":
-		state = "poweredOff"
+		state = "off"
+	case "suspended":
+		state = "suspended"
 	}
 	err := v.validatePowerState(state)
 	if err != nil {
@@ -785,7 +791,7 @@ func (v *vmctl) Wait(vid, state string) error {
 	checkPower := true
 	running := false
 	for {
-		if (state == "poweredOn") && !running {
+		if (state == "on") && !running {
 			// if waiting for poweredOn, ensure vmrun shows the instance before querying with vmrest API
 			checkPower = false
 			vms, err := v.Show("", ShowOptions{Running: true})
@@ -825,25 +831,25 @@ func (v *vmctl) Wait(vid, state string) error {
 	}
 }
 
-func (v *vmctl) Stop(vid string, options StopOptions) error {
+func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	if v.debug {
 		log.Printf("Stop(%s, %+v)\n", vid, options)
 	}
 	vm, err := v.api.GetVM(vid)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	ok, err := v.checkPowerState(&vm, "stop", "poweredOff")
+	ok, err := v.checkPowerState(&vm, "stop", "off")
 	if err != nil {
-		return err
+		return "", err
 	}
 	if ok {
-		return nil
+		return "already stopped", nil
 	}
 	path, err := PathFormat(v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// FIXME: may need -vp PASSWORD here for encrypted instances
 	command := "vmrun -T ws stop " + path
@@ -854,20 +860,23 @@ func (v *vmctl) Stop(vid string, options StopOptions) error {
 	if v.verbose {
 		fmt.Printf("[%s] requesting %s...\n", vm.Name, action)
 	}
+
 	_, err = v.RemoteExec(command, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
+
 	if v.verbose {
 		fmt.Printf("[%s] %s request complete\n", vm.Name, action)
 	}
 	if options.Wait {
-		err := v.Wait(vid, "poweredOff")
+		err := v.Wait(vid, "off")
 		if err != nil {
-			return err
+			return "", err
 		}
+		return "stopped", nil
 	}
-	return nil
+	return "stop pending", nil
 }
 
 func (v *vmctl) Get(vid string) (VM, error) {
@@ -921,7 +930,7 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return string(data), nil
 
 	case "power", "powerstate":
-		err := v.api.GetPowerState(&vm)
+		err := v.cli.QueryPowerState(&vm)
 		if err != nil {
 			return "", err
 		}
@@ -1035,7 +1044,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 		}
 	}
 	if queryType == QueryTypeState || queryType == QueryTypeAll {
-		err := v.api.GetState(vm)
+		err := v.cli.QueryPowerState(vm)
 		if err != nil {
 			return err
 		}
@@ -1043,7 +1052,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 		if err != nil {
 			return err
 		}
-		err = v.getMacAddress(vm)
+		err = v.cli.GetMacAddress(vm)
 		if err != nil {
 			return err
 		}
@@ -1208,7 +1217,8 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 				value = v
 
 			}
-			err := v.requirePowerState(&vm, "poweredOff", fmt.Sprintf("modify '%s'", key))
+			err := v.requirePowerState(&vm, "off", fmt.Sprintf("modify '%s'", key))
+
 			if err != nil {
 				return err
 			}
@@ -1370,24 +1380,6 @@ func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
 	args := []string{"-i", v.KeyFile, localPath, remoteTarget}
 	_, err = v.exec("scp", args, "", nil)
 	return err
-}
-
-func (v *vmctl) getMacAddress(vm *VM) error {
-	macType, err := v.api.GetParam(vm, "ethernet0.addressType")
-	if err != nil {
-		return err
-	}
-	macParam := "ethernet0.generatedAddress"
-	if macType == "static" {
-		macParam = "ethernet0.address"
-	}
-	value, err := v.api.GetParam(vm, macParam)
-	if err != nil {
-		return err
-	}
-	value = strings.Trim(value, `"`)
-	vm.MacAddress = value
-	return nil
 }
 
 func (v *vmctl) getIpAddress(vm *VM) error {
@@ -1633,7 +1625,8 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		return nil, err
 	}
 
-	err = v.requirePowerState(&vm, "poweredOff", "modify the instance")
+	err = v.requirePowerState(&vm, "off", "modify the instance")
+
 	if err != nil {
 		return nil, err
 	}
