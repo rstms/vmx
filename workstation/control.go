@@ -186,7 +186,6 @@ type vmctl struct {
 	KeyFile  string
 	Path     string
 	IsoPath  string
-	api      *VMRestClient
 	winexec  *WinExecClient
 	relay    *Relay
 	cli      *vmcli
@@ -274,12 +273,6 @@ func NewController() (Controller, error) {
 		v.relay = r
 	}
 
-	client, err := NewVMRestClient()
-	if err != nil {
-		return nil, err
-	}
-	v.api = client
-
 	v.cli = NewCliClient(&v)
 
 	v.Local = runtime.GOOS
@@ -346,7 +339,7 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, []VMFile, err
 	} else if vid == "" {
 		path = v.Path
 	} else {
-		vm, err := v.api.GetVM(vid)
+		vm, err := v.cli.GetVM(vid)
 		if err != nil {
 			return lines, files, err
 		}
@@ -419,7 +412,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		}
 	} else {
 		// set vids from API
-		v, err := v.api.GetVIDs()
+		v, err := v.cli.GetVIDs()
 		if err != nil {
 			return []VM{}, err
 		}
@@ -436,7 +429,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 	vms := make([]VM, len(selected))
 	for i, vid := range selected {
 		if options.Detail {
-			vm, err := v.api.GetVM(vid.Name)
+			vm, err := v.cli.GetVM(vid.Name)
 			if err != nil {
 				return []VM{}, err
 			}
@@ -460,7 +453,7 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	// check for existing instance
-	_, err := v.api.GetVM(name)
+	_, err := v.cli.GetVM(name)
 	if err == nil {
 		return vm, fmt.Errorf("create failed, instance '%s' exists", name)
 	}
@@ -641,7 +634,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 	if v.debug {
 		log.Printf("Start(%s, %+v)\n", vid, options)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return "", err
 	}
@@ -727,7 +720,7 @@ func (v *vmctl) setStretch(vm *VM) error {
 		log.Printf("setStretch(%s) %s\n", vm.Name, action)
 	}
 	if stretch != "" {
-		err := v.api.SetParam(vm, "gui.EnableStretchGuest", stretch)
+		err := v.cli.SetParam(vm, "gui.EnableStretchGuest", stretch)
 		if err != nil {
 			return err
 		}
@@ -751,8 +744,8 @@ func (v *vmctl) validatePowerState(state string) error {
 }
 
 func (v *vmctl) queryPowerState(vid string) (string, error) {
-	v.api.Reset()
-	vm, err := v.api.GetVM(vid)
+	v.cli.Reset()
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return "", err
 	}
@@ -835,7 +828,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	if v.debug {
 		log.Printf("Stop(%s, %+v)\n", vid, options)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return "", err
 	}
@@ -883,7 +876,7 @@ func (v *vmctl) Get(vid string) (VM, error) {
 	if v.debug {
 		log.Printf("Get(%s)\n", vid)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return VM{}, err
 	}
@@ -971,11 +964,11 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		return ret, nil
 
 	case "mac", "macaddr", "macaddress":
-		value, err := v.api.GetParam(&vm, "ethernet0.generatedAddress")
+		err := v.cli.GetMacAddress(&vm, nil)
 		if err != nil {
 			return "", err
 		}
-		return value, nil
+		return vm.MacAddress, nil
 
 	case "state", "status":
 		state, err := v.GetStatus(vid)
@@ -1022,7 +1015,7 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 	}
 
 	// try property as a VMX key
-	value, err = v.api.GetParam(&vm, property)
+	value, err = v.cli.GetParam(&vm, property)
 	if err != nil {
 		return "", err
 	}
@@ -1034,7 +1027,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 		log.Printf("queryVM(%s, %d)\n", vm.Name, queryType)
 	}
 	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
-		err := v.api.GetConfig(vm)
+		err := v.cli.GetConfig(vm)
 		if err != nil {
 			return err
 		}
@@ -1052,7 +1045,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 		if err != nil {
 			return err
 		}
-		err = v.cli.GetMacAddress(vm)
+		err = v.cli.GetMacAddress(vm, nil)
 		if err != nil {
 			return err
 		}
@@ -1138,7 +1131,7 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 	if v.debug {
 		log.Printf("SetProperty(%s, %s, %s)\n", vid, property, value)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return err
 	}
@@ -1223,7 +1216,7 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 				return err
 			}
 		}
-		err = v.api.SetParam(&vm, property, value)
+		err = v.cli.SetParam(&vm, property, value)
 		if err != nil {
 			return err
 		}
@@ -1298,7 +1291,7 @@ func (v *vmctl) Download(vid, localPath, filename string) error {
 	if v.debug {
 		log.Printf("Download(%s, %s, %s)\n", vid, localPath, filename)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return err
 	}
@@ -1344,7 +1337,7 @@ func (v *vmctl) Upload(vid, localPath, filename string) error {
 	if v.debug {
 		log.Printf("Upload(%s, %s, %s)\n", vid, localPath, filename)
 	}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return err
 	}
@@ -1620,7 +1613,7 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		log.Printf("IsoOptions: %s\n", out)
 	}
 	actions := []string{}
-	vm, err := v.api.GetVM(vid)
+	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return nil, err
 	}

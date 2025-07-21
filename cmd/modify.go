@@ -96,17 +96,10 @@ Changes can be specified for multiple categories in a single command.
 
 func initETHOptions(options *workstation.CreateOptions) error {
 	ethEnable := viper.GetBool("eth_enable")
-	ethAuto := viper.GetBool("eth_auto")
-	if ethAuto {
-		ethEnable = true
-	}
 	ethDisable := viper.GetBool("eth_disable")
 	ethAddress := viper.GetString("eth_mac")
 	if ethAddress != "" {
 		ethEnable = true
-	}
-	if ethAuto && ethAddress != "" {
-		return fmt.Errorf("conflict: eth_auto/eth_mac")
 	}
 	if ethEnable && ethDisable {
 		return fmt.Errorf("conflict: eth_enable/eth_disable")
@@ -205,10 +198,9 @@ func initShareOptions(options *workstation.CreateOptions) error {
 
 func init() {
 	rootCmd.AddCommand(modifyCmd)
-	OptionSwitch(modifyCmd, "eth-enable", "", "configure ethernet NIC")
 	OptionSwitch(modifyCmd, "eth-disable", "", "remove the ethernet NIC")
+	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet with auto-generated MAC address")
 	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet with user-defined MAC address")
-	OptionString(modifyCmd, "eth-auto", "", "", "enable ethernet with auto-generated MAC address")
 
 	OptionSwitch(modifyCmd, "vnc-enable", "", "enable the integrated VNC server")
 	OptionSwitch(modifyCmd, "vnc-disable", "", "disable and remove VNC")
