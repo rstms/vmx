@@ -11,11 +11,31 @@ import (
 	"strings"
 )
 
-var ViperPrefix = ""
+var ViperPrefix = "vmx.cli."
 var LogFile *os.File
 
-func ViperKey(name string) string {
+func viperKey(name string) string {
 	return ViperPrefix + strings.ReplaceAll(name, "-", "_")
+}
+
+func ViperGetBool(key string) bool {
+	return viper.GetBool(viperKey(key))
+}
+
+func ViperGetString(key string) string {
+	return viper.GetString(viperKey(key))
+}
+
+func ViperGetInt(key string) int {
+	return viper.GetInt(viperKey(key))
+}
+
+func ViperGetInt64(key string) int64 {
+	return viper.GetInt64(viperKey(key))
+}
+
+func ViperSet(key string, value any) {
+	viper.Set(viperKey(key), value)
 }
 
 func OptionSwitch(cmd *cobra.Command, name, flag, description string) {
@@ -26,14 +46,14 @@ func OptionSwitch(cmd *cobra.Command, name, flag, description string) {
 		} else {
 			rootCmd.PersistentFlags().BoolP(name, flag, false, description)
 		}
-		viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
+		viper.BindPFlag(viperKey(name), rootCmd.PersistentFlags().Lookup(name))
 	} else {
 		if flag == "" {
 			cmd.Flags().Bool(name, false, description)
 		} else {
 			cmd.Flags().BoolP(name, flag, false, description)
 		}
-		viper.BindPFlag(ViperKey(name), cmd.Flags().Lookup(name))
+		viper.BindPFlag(viperKey(name), cmd.Flags().Lookup(name))
 	}
 }
 
@@ -46,19 +66,19 @@ func OptionString(cmd *cobra.Command, name, flag, defaultValue, description stri
 			rootCmd.PersistentFlags().StringP(name, flag, defaultValue, description)
 		}
 
-		viper.BindPFlag(ViperKey(name), rootCmd.PersistentFlags().Lookup(name))
+		viper.BindPFlag(viperKey(name), rootCmd.PersistentFlags().Lookup(name))
 	} else {
 		if flag == "" {
 			cmd.PersistentFlags().String(name, defaultValue, description)
 		} else {
 			cmd.PersistentFlags().StringP(name, flag, defaultValue, description)
 		}
-		viper.BindPFlag(ViperKey(name), cmd.PersistentFlags().Lookup(name))
+		viper.BindPFlag(viperKey(name), cmd.PersistentFlags().Lookup(name))
 	}
 }
 
 func OpenLog() {
-	filename := viper.GetString("logfile")
+	filename := ViperGetString("logfile")
 	LogFile = nil
 	if filename == "stdout" || filename == "-" {
 		log.SetOutput(os.Stdout)
@@ -76,7 +96,7 @@ func OpenLog() {
 		log.Printf("%s v%s startup\n", rootCmd.Name(), rootCmd.Version)
 		cobra.OnFinalize(CloseLog)
 	}
-	if viper.GetBool("debug") {
+	if ViperGetBool("debug") {
 		log.SetFlags(log.Flags() | log.Lshortfile)
 	}
 }
@@ -148,7 +168,7 @@ func InitConfig() {
 		}
 	}
 	OpenLog()
-	if viper.ConfigFileUsed() != "" && viper.GetBool("verbose") {
+	if viper.ConfigFileUsed() != "" && ViperGetBool("verbose") {
 		log.Println("Using config file:", viper.ConfigFileUsed())
 	}
 }

@@ -33,7 +33,6 @@ package cmd
 import (
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var stopCmd = &cobra.Command{
@@ -50,8 +49,8 @@ to quickly create a Cobra application.`,
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     viper.GetBool("wait"),
-			PowerOff: viper.GetBool("poweroff"),
+			Wait:     ViperGetBool("wait"),
+			PowerOff: ViperGetBool("poweroff"),
 		}
 		result, err := vmx.Stop(vid, options)
 		cobra.CheckErr(err)

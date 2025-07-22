@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"io"
 	"log"
 	"os"
@@ -19,6 +18,9 @@ import (
 const Version = "0.0.24"
 
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
+var VMX_PATTERN = regexp.MustCompile(`^.*\.[vV][mM][xX]$`)
+var ISO_PATTERN = regexp.MustCompile(`^.*\.[iI][sS][oO]$`)
+var ALL_PATTERN = regexp.MustCompile(`.*`)
 
 type VID struct {
 	Id   string
@@ -63,58 +65,11 @@ type VM struct {
 	VncEnabled bool
 	VncPort    int
 
-	EnableCopy            bool
-	EnablePaste           bool
-	EnableDragAndDrop     bool
-	EnableFilesystemShare bool
+	ClipboardEnabled bool
+	FileShareEnabled bool
 
 	Running    bool
 	PowerState string
-}
-
-type CreateOptions struct {
-	GuestOS                string
-	CpuCount               int
-	MemorySize             string
-	DiskSize               string
-	DiskPreallocated       bool
-	DiskSingleFile         bool
-	EFIBoot                bool
-	HostTimeSync           bool
-	GuestTimeZone          string
-	DisableDragAndDrop     bool
-	DisableClipboard       bool
-	DisableFilesystemShare bool
-	MacAddress             string
-	IsoPresent             bool
-	SerialPipe             string
-	SerialClient           bool
-	SerialAppMode          bool
-	VNCEnabled             bool
-	VNCPort                int
-	SharedHostPath         string
-	SharedGuestPath        string
-	ModifyNIC              bool
-	ModifyTTY              bool
-	ModifyVNC              bool
-	ModifyEFI              bool
-	ModifyShare            bool
-	Wait                   bool
-}
-
-func NewCreateOptions() *CreateOptions {
-	return &CreateOptions{
-		CpuCount:               1,
-		MemorySize:             "1G",
-		DiskSize:               "16G",
-		GuestOS:                "other",
-		DisableDragAndDrop:     true,
-		DisableClipboard:       true,
-		DisableFilesystemShare: true,
-		MacAddress:             "auto",
-		SerialAppMode:          true,
-		VNCPort:                5900,
-	}
 }
 
 type DestroyOptions struct {
@@ -123,9 +78,11 @@ type DestroyOptions struct {
 }
 
 type StartOptions struct {
-	Background bool
-	FullScreen bool
-	Wait       bool
+	Background     bool
+	FullScreen     bool
+	Wait           bool
+	ModifyStretch  bool
+	StretchEnabled bool
 }
 
 type StopOptions struct {
@@ -135,6 +92,7 @@ type StopOptions struct {
 
 type FilesOptions struct {
 	Detail bool
+	All    bool
 	Iso    bool
 }
 
@@ -168,12 +126,9 @@ type Controller interface {
 	Show(string, ShowOptions) ([]VM, error)
 	GetProperty(string, string) (string, error)
 	SetProperty(string, string, string) error
-	LocalExec(string, *int) ([]string, error)
-	RemoteExec(string, *int) ([]string, error)
-	RemoteSpawn(string, *int) error
 	Upload(string, string, string) error
 	Download(string, string, string) error
-	Files(string, FilesOptions) ([]string, []VMFile, error)
+	Files(string, FilesOptions) ([]string, error)
 	Wait(string, string) error
 	SendKeys(string, string) error
 	Close() error
@@ -184,10 +139,9 @@ type vmctl struct {
 	Hostname string
 	Username string
 	KeyFile  string
-	Path     string
+	Roots    []string
 	IsoPath  string
 	winexec  *WinExecClient
-	relay    *Relay
 	cli      *vmcli
 	Shell    string
 	Local    string
@@ -200,7 +154,7 @@ type vmctl struct {
 
 // return true if VMWare Workstation Host is localhost
 func isLocal() (bool, error) {
-	remote := viper.GetString("host")
+	remote := ViperGetString("host")
 	if remote == "" || remote == "localhost" || remote == "127.0.0.1" {
 		return true, nil
 	}
@@ -239,39 +193,33 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 
 func NewController() (Controller, error) {
 
-	_, keyfile, err := GetViperPath("ssh_key")
-	if err != nil {
-		return nil, err
-	}
+	ViperInit("vmx.")
 
 	v := vmctl{
-		Hostname: viper.GetString("host"),
-		Username: viper.GetString("user"),
-		KeyFile:  keyfile,
-		verbose:  viper.GetBool("verbose"),
-		debug:    viper.GetBool("debug"),
+		Hostname: ViperGetString("host"),
+		Username: ViperGetString("user"),
+		KeyFile:  os.ExpandEnv(ViperGetString("ssh_key")),
+		verbose:  ViperGetBool("verbose"),
+		debug:    ViperGetBool("debug"),
 		Version:  Version,
 	}
 
-	viper.SetDefault("vmware_path", "/var/vmware")
-	v.Path, err = PathNormalize(viper.GetString("vmware_path"))
-	if err != nil {
-		return nil, err
-	}
-	viper.SetDefault("iso_path", "/var/vmware/iso")
-	v.IsoPath, err = PathNormalize(viper.GetString("iso_path"))
-	if err != nil {
-		return nil, err
-	}
-
-	relayConfig := viper.GetString("ssh_relay")
-	if relayConfig != "" {
-		r, err := NewRelay(relayConfig)
+	ViperSetDefault("vmware_roots", []string{"/var/vmware"})
+	roots := ViperGetStringSlice("vmware_roots")
+	v.Roots = make([]string, len(roots))
+	for i, root := range roots {
+		normalized, err := PathNormalize(os.ExpandEnv(root))
 		if err != nil {
 			return nil, err
 		}
-		v.relay = r
+		v.Roots[i] = normalized
 	}
+	ViperSetDefault("iso_path", "/var/vmware/iso")
+	path, err := PathNormalize(os.ExpandEnv(ViperGetString("iso_path")))
+	if err != nil {
+		return nil, err
+	}
+	v.IsoPath = path
 
 	v.cli = NewCliClient(&v)
 
@@ -289,7 +237,7 @@ func NewController() (Controller, error) {
 			v.Shell = "sh"
 		}
 	} else {
-		if viper.GetString("shell") == "winexec" {
+		if ViperGetString("shell") == "winexec" {
 			w, err := NewWinExecClient()
 			if err != nil {
 				return nil, err
@@ -317,75 +265,7 @@ func (v *vmctl) Close() error {
 	if v.debug {
 		log.Println("Close")
 	}
-	if v.relay != nil {
-		return v.relay.Close()
-	}
 	return nil
-}
-
-func (v *vmctl) Files(vid string, options FilesOptions) ([]string, []VMFile, error) {
-	if v.debug {
-		log.Printf("Files(%s, %+v)\n", vid, options)
-	}
-	lines := []string{}
-	files := []VMFile{}
-
-	sep := string(filepath.Separator)
-	var path string
-	if options.Iso {
-		path = FormatIsoPath(v.IsoPath, vid)
-	} else if strings.Contains(vid, sep) {
-		path = vid
-	} else if vid == "" {
-		path = v.Path
-	} else {
-		vm, err := v.cli.GetVM(vid)
-		if err != nil {
-			return lines, files, err
-		}
-		path, _ = filepath.Split(vm.Path)
-	}
-
-	path = strings.TrimRight(path, sep)
-
-	hostPath, err := PathFormat(v.Remote, path)
-	if err != nil {
-		return lines, files, err
-	}
-
-	var command string
-	if v.Remote == "windows" {
-		if options.Detail {
-			command = "dir /-C"
-		} else {
-			command = "dir /B"
-		}
-	} else {
-		if options.Detail {
-			command = "ls -l"
-		} else {
-			command = "ls"
-		}
-	}
-	lines, err = v.RemoteExec(command+" "+hostPath, nil)
-	if err != nil {
-		return lines, files, err
-	}
-	if options.Detail {
-		files, err = ParseFileList(v.Remote, lines)
-		if err != nil {
-			return lines, files, err
-		}
-	} else {
-		trimmed := make([]string, len(lines))
-		files = make([]VMFile, len(lines))
-		for i, line := range lines {
-			trimmed[i] = strings.TrimSpace(line)
-			files[i] = VMFile{Name: trimmed[i]}
-		}
-		lines = trimmed
-	}
-	return lines, files, nil
 }
 
 func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
@@ -443,115 +323,6 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		}
 	}
 	return vms, nil
-}
-
-func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions) (VM, error) {
-	var vm VM
-
-	if v.debug {
-		log.Printf("Create: %s %+v\n", name, options)
-	}
-
-	// check for existing instance
-	_, err := v.cli.GetVM(name)
-	if err == nil {
-		return vm, fmt.Errorf("create failed, instance '%s' exists", name)
-	}
-
-	// display create options
-	if v.verbose {
-		ostr, err := FormatJSON(&options)
-		if err != nil {
-			return vm, err
-		}
-		fmt.Printf("[%s] create options: %s\n", name, ostr)
-	}
-
-	vm.Name = name
-	vm.Path = filepath.Join(viper.GetString("vmware_path"), name, name+".vmx")
-
-	// create instance directory
-	dir, _ := filepath.Split(vm.Path)
-	hostPath, err := PathFormat(v.Remote, dir)
-	if err != nil {
-		return vm, err
-	}
-	_, err = v.RemoteExec("mkdir "+hostPath, nil)
-	if err != nil {
-		return vm, err
-	}
-
-	if isoOptions.IsoFile != "" {
-		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, isoOptions.IsoFile))
-		if err != nil {
-			return vm, err
-		}
-		isoOptions.IsoFile = path
-	}
-
-	//fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
-
-	// write vmx file
-	vmx, err := GenerateVMX(v.Remote, name, &options, &isoOptions)
-	if err != nil {
-		return vm, err
-	}
-	data, err := vmx.Read()
-	if err != nil {
-		return vm, err
-	}
-	err = v.WriteHostFile(&vm, vm.Name+".vmx", data)
-	if err != nil {
-		return vm, err
-	}
-
-	// create vmdk disk
-	pcd, err := PathChdirCommand(v.Remote, hostPath)
-	if err != nil {
-		return vm, err
-	}
-	command := pcd
-
-	diskSize, err := SizeParse(options.DiskSize)
-	if err != nil {
-		return vm, err
-	}
-	diskSizeMB := int64(diskSize / MB)
-
-	//fmt.Printf("options.DiskSize: %s\n", options.DiskSize)
-	//fmt.Printf("diskSize: %d\n", diskSize)
-	//fmt.Printf("diskSizeMB: %d\n", diskSizeMB)
-
-	diskType := ParseDiskType(options.DiskSingleFile, options.DiskPreallocated)
-
-	command += fmt.Sprintf("vmware-vdiskmanager -c -s %dMB -a nvme -t %d %s.vmdk", diskSizeMB, diskType, name)
-
-	result, err := v.RemoteExec(command, nil)
-	if err != nil {
-		return vm, err
-	}
-	if v.verbose {
-		fmt.Printf("[%s] %s\n", name, result)
-	}
-
-	if options.Wait {
-		err := v.Wait(name, "off")
-		if err != nil {
-			return vm, err
-		}
-
-		_, err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
-		if err != nil {
-			return vm, err
-		}
-		_, err = v.Stop(name, StopOptions{Wait: true})
-		if err != nil {
-			return vm, err
-		}
-
-	}
-
-	return vm, nil
 }
 
 func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
@@ -646,8 +417,13 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		return "already started", nil
 	}
 
+	var savedBootConnected bool
 	if isoOptions.ModifyISO {
-		_, err := v.Modify(vid, CreateOptions{}, isoOptions)
+		savedBootConnected, err = v.cli.GetIsoStartConnected(&vm)
+		if err != nil {
+			return "", err
+		}
+		_, err = v.Modify(vid, CreateOptions{}, isoOptions)
 		if err != nil {
 			return "", err
 		}
@@ -678,9 +454,11 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		}
 	}
 
-	err = v.setStretch(&vm)
-	if err != nil {
-		return "", err
+	if options.ModifyStretch {
+		err = v.setStretch(&vm, options.StretchEnabled)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if v.verbose {
@@ -700,21 +478,28 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		if err != nil {
 			return "", err
 		}
+
+		if isoOptions.ModifyISO {
+			log.Printf("[%s] saved ISO BootConnected state: %v\n", vm.Name, savedBootConnected)
+			if savedBootConnected != isoOptions.IsoBootConnected {
+				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
+				if err != nil {
+					return "", err
+				}
+			}
+		}
+
 		return "started", nil
 	}
 	return "start pending", nil
 }
 
-func (v *vmctl) setStretch(vm *VM) error {
-	var stretch string
-	action := "unchanged"
-	if viper.GetBool("stretch") {
+func (v *vmctl) setStretch(vm *VM, enabled bool) error {
+	stretch := "FALSE"
+	action := "no_stretch"
+	if enabled {
 		stretch = "TRUE"
 		action = "enabled"
-	}
-	if viper.GetBool("no_stretch") {
-		stretch = "FALSE"
-		action = "disabled"
 	}
 	if v.debug {
 		log.Printf("setStretch(%s) %s\n", vm.Name, action)
@@ -777,9 +562,9 @@ func (v *vmctl) Wait(vid, state string) error {
 		fmt.Printf("[%s] awaiting %s...\n", vid, state)
 	}
 	start := time.Now()
-	interval_seconds := viper.GetInt64("interval")
+	interval_seconds := ViperGetInt64("interval")
 	interval := time.Duration(interval_seconds) * time.Second
-	timeout_seconds := viper.GetInt64("timeout")
+	timeout_seconds := ViperGetInt64("timeout")
 	timeout := time.Duration(timeout_seconds) * time.Second
 	checkPower := true
 	running := false
@@ -1155,20 +940,8 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 			case "Running", "PowerState":
 				return fmt.Errorf("Use 'start', 'stop', or 'kill' to modify %s", key)
 
-			case "MacAddress":
-				return fmt.Errorf("Use 'update nic' to modify %s", key)
-
-			case "IsoFile", "IsoAttached", "IsoAttachOnStart":
-				return fmt.Errorf("Use 'update iso' to modify %s", key)
-
-			case "SerialAttached", "SerialPipe":
-				return fmt.Errorf("Use 'update tty' to modify %s", key)
-
-			case "VncEnabled", "VncPort":
-				return fmt.Errorf("Use 'update vnc' to modify %s", key)
-
-			case "EnableFileSystemShare":
-				return fmt.Errorf("Use 'update share' to modify %s", key)
+			case "MacAddress", "IsoFile", "IsoAttached", "IsoBootConnected", "SerialAttched", "SerialPipe", "VncEnabled", "VncPort", "FileShareEnabled", "ClipboardEnabled":
+				return fmt.Errorf("Use modify command to change %s", key)
 
 			case "CpuCount":
 				property = "numvcpus"
@@ -1186,28 +959,6 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 
 			case "GuestOS":
 				property = "guestOS"
-
-			case "EnableCopy":
-				property = "isolation.tools.copy.disable"
-				v, err := FormatVMXBool(value)
-				if err != nil {
-					return err
-				}
-				value = v
-			case "EnablePaste":
-				property = "isolation.tools.paste.disable"
-				v, err := FormatVMXBool(value)
-				if err != nil {
-					return err
-				}
-				value = v
-			case "EnableDragAndDrop":
-				property = "isolation.tools.dnd.disable"
-				v, err := FormatVMXBool(value)
-				if err != nil {
-					return err
-				}
-				value = v
 
 			}
 			err := v.requirePowerState(&vm, "off", fmt.Sprintf("modify '%s'", key))
@@ -1667,9 +1418,9 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 
 	if options.ModifyTTY {
 		if v.debug {
-			log.Printf("ModifyTTY: pipe=%s client=%v app=%v\n", options.SerialPipe, options.SerialClient, options.SerialAppMode)
+			log.Printf("ModifyTTY: pipe=%s client=%v v2v=%v\n", options.SerialPipe, options.SerialClient, options.SerialV2V)
 		}
-		action, err := vmx.SetSerial(options.SerialPipe, options.SerialClient, options.SerialAppMode)
+		action, err := vmx.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
 		if err != nil {
 			return nil, err
 		}
@@ -1692,11 +1443,19 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		actions = append(actions, action)
 	}
 
+	if options.ModifyClipboard {
+		action, err := vmx.SetClipboard(options.ClipboardEnabled)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
 	if options.ModifyShare {
 		if v.debug {
-			log.Printf("ModifyShare: host=%s guest=%s\n", options.SharedHostPath, options.SharedGuestPath)
+			log.Printf("ModifyShare: enabled=%v host=%s guest=%s\n", options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
 		}
-		action, err := vmx.SetShare(options.SharedHostPath, options.SharedGuestPath)
+		action, err := vmx.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
 		if err != nil {
 			return nil, err
 		}

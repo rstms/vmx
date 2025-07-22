@@ -49,16 +49,20 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		if viper.GetBool("no_stretch") {
-			viper.Set("stretch", false)
-		} else {
-			viper.Set("stretch", true)
-		}
 
 		options := workstation.StartOptions{
-			Background: viper.GetBool("background"),
-			FullScreen: viper.GetBool("fullscreen"),
-			Wait:       viper.GetBool("wait"),
+			Background: ViperGetBool("background"),
+			FullScreen: ViperGetBool("fullscreen"),
+			Wait:       ViperGetBool("wait"),
+		}
+
+		if ViperGetBool("no_stretch") {
+			options.ModifyStretch = true
+			options.StretchEnabled = false
+		} else {
+			viper.Set("stretch", true)
+			options.ModifyStretch = true
+			options.StretchEnabled = true
 		}
 
 		isoOptions, err := InitIsoOptions()

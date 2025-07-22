@@ -33,7 +33,6 @@ package cmd
 import (
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var killCmd = &cobra.Command{
@@ -47,7 +46,7 @@ var killCmd = &cobra.Command{
 		InitController()
 		vid := args[0]
 		options := workstation.StopOptions{
-			Wait:     viper.GetBool("wait"),
+			Wait:     ViperGetBool("wait"),
 			PowerOff: true,
 		}
 		result, err := vmx.Stop(vid, options)

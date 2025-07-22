@@ -36,7 +36,6 @@ import (
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var modifyCmd = &cobra.Command{
@@ -60,6 +59,8 @@ Changes can be specified for multiple categories in a single command.
 
 		options := workstation.CreateOptions{}
 
+		// initX functions depend on zero-values in CreateOptions
+
 		err = initETHOptions(&options)
 		cobra.CheckErr(err)
 
@@ -75,6 +76,9 @@ Changes can be specified for multiple categories in a single command.
 		err = initShareOptions(&options)
 		cobra.CheckErr(err)
 
+		err = initClipboardOptions(&options)
+		cobra.CheckErr(err)
+
 		isoOptions, err := InitIsoOptions()
 		cobra.CheckErr(err)
 
@@ -85,7 +89,7 @@ Changes can be specified for multiple categories in a single command.
 			output[vm.Name] = actions
 			fmt.Println(FormatJSON(output))
 		} else {
-			if viper.GetBool("verbose") {
+			if ViperGetBool("verbose") {
 				for _, action := range *actions {
 					fmt.Printf("[%s] %s\n", vm.Name, action)
 				}
@@ -95,23 +99,26 @@ Changes can be specified for multiple categories in a single command.
 }
 
 func initETHOptions(options *workstation.CreateOptions) error {
-	ethEnable := viper.GetBool("eth_enable")
-	ethDisable := viper.GetBool("eth_disable")
-	ethAddress := viper.GetString("eth_mac")
-	if ethAddress != "" {
-		ethEnable = true
-	}
-	if ethEnable && ethDisable {
+	enable := ViperGetBool("eth_enable")
+	disable := ViperGetBool("eth_disable")
+	if enable && disable {
 		return fmt.Errorf("conflict: eth_enable/eth_disable")
 	}
-	switch {
-	case ethEnable:
-		options.ModifyNIC = true
-		options.MacAddress = ethAddress
-		if options.MacAddress == "" {
-			options.MacAddress = "auto"
+	address := ViperGetString("eth_mac")
+	if address != "" {
+		enable = true
+		if disable {
+			return fmt.Errorf("conflict: eth_mac/eth_disable")
 		}
-	case ethDisable:
+	}
+	switch {
+	case enable:
+		options.ModifyNIC = true
+		if address == "" {
+			address = "auto"
+		}
+		options.MacAddress = address
+	case disable:
 		options.ModifyNIC = true
 	}
 	return nil
@@ -119,51 +126,54 @@ func initETHOptions(options *workstation.CreateOptions) error {
 
 func initTTYOptions(options *workstation.CreateOptions) error {
 
-	ttyPipe := viper.GetString("tty_pipe")
-	ttyDisable := viper.GetBool("tty_disable")
-	if (ttyPipe != "") && ttyDisable {
-		return fmt.Errorf("conflict: tty pipe/disable")
-	}
-	ttyClient := viper.GetBool("tty_client")
-	ttyAppMode := viper.GetBool("tty_app_mode")
+	ttyPipe := ViperGetString("tty_pipe")
+	disable := ViperGetBool("tty_disable")
+	ttyClient := ViperGetBool("tty_client")
+	ttyV2V := ViperGetBool("tty_v2v")
 
-	if ttyDisable && (ttyClient || ttyAppMode) {
-		return fmt.Errorf("conflict: tty disable/client|app_mode")
-	}
 	switch {
 	case ttyPipe != "":
+		if disable {
+			return fmt.Errorf("conflict: tty-pipe/tty-disable")
+		}
 		options.ModifyTTY = true
 		options.SerialPipe = ttyPipe
 		options.SerialClient = ttyClient
-		options.SerialAppMode = ttyAppMode
-	case viper.GetBool("tty_disable"):
+		options.SerialV2V = ttyV2V
+	case disable:
+		if ttyClient {
+			return fmt.Errorf("conflict: tty-disable/tty-client")
+		}
+		if ttyV2V {
+			return fmt.Errorf("conflict: tty-disable/tty-v2v")
+		}
 		options.ModifyTTY = true
 	}
 	return nil
 }
 
 func initVNCOptions(options *workstation.CreateOptions) error {
-	vncEnable := viper.GetBool("vnc_enable")
-	vncDisable := viper.GetBool("vnc_disable")
-	if vncEnable && vncDisable {
-		return fmt.Errorf("conflict: vnc enable/disable")
+	enable := ViperGetBool("vnc_enable")
+	disable := ViperGetBool("vnc_disable")
+	if enable && disable {
+		return fmt.Errorf("conflict: vnc-enable/vnc-disable")
 	}
 	switch {
-	case vncEnable:
+	case enable:
 		options.ModifyVNC = true
 		options.VNCEnabled = true
-		options.VNCPort = viper.GetInt("vnc_port")
-	case vncDisable:
+		options.VNCPort = ViperGetInt("vnc_port")
+	case disable:
 		options.ModifyVNC = true
 	}
 	return nil
 }
 
 func initEFIOptions(options *workstation.CreateOptions) error {
-	bootEFI := viper.GetBool("boot_efi")
-	bootBIOS := viper.GetBool("boot_bios")
+	bootEFI := ViperGetBool("boot_efi")
+	bootBIOS := ViperGetBool("boot_bios")
 	if bootEFI && bootBIOS {
-		return fmt.Errorf("conflict: EFI/BIOS")
+		return fmt.Errorf("conflict: boot-efi/boot-bios")
 	}
 	switch {
 	case bootEFI:
@@ -176,45 +186,65 @@ func initEFIOptions(options *workstation.CreateOptions) error {
 }
 
 func initShareOptions(options *workstation.CreateOptions) error {
-	shareEnable := viper.GetString("share_enable")
-	shareDisable := viper.GetBool("share_disable")
-	if shareEnable != "" && shareDisable {
-		return fmt.Errorf("conflict: share-enable/share-disable")
-	}
+	enable := ViperGetString("share_enable")
+	disable := ViperGetBool("share_disable")
 	switch {
-	case shareEnable != "":
+	case enable != "":
+		if disable {
+			return fmt.Errorf("conflict: share-enable/share-disable")
+		}
 		options.ModifyShare = true
-		host, guest, ok := strings.Cut(shareEnable, ",")
+		options.FileShareEnabled = true
+		host, guest, ok := strings.Cut(enable, ",")
 		if !ok || host == "" || guest == "" {
-			return fmt.Errorf("share-enable path format (host_path,guest_path): '%s'", shareEnable)
+			return fmt.Errorf("failed parsing share-enable paths: '%s'", enable)
 		}
 		options.SharedHostPath = host
 		options.SharedGuestPath = guest
-	case shareDisable:
+	case disable:
 		options.ModifyShare = true
+	}
+	return nil
+}
+
+func initClipboardOptions(options *workstation.CreateOptions) error {
+	enable := ViperGetBool("clibboard_enable")
+	disable := ViperGetBool("clipboard_disable")
+	switch {
+	case enable:
+		if disable {
+			return fmt.Errorf("conflict: clipboard-enable/clipboard-disable")
+		}
+		options.ModifyClipboard = true
+		options.ClipboardEnabled = true
+	case disable:
+		options.ModifyClipboard = true
 	}
 	return nil
 }
 
 func init() {
 	rootCmd.AddCommand(modifyCmd)
-	OptionSwitch(modifyCmd, "eth-disable", "", "remove the ethernet NIC")
-	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet with auto-generated MAC address")
-	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet with user-defined MAC address")
+	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet [auto-generated MAC]")
+	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet [user-defined MAC]")
+	OptionSwitch(modifyCmd, "eth-disable", "", "remove ethernet device")
 
-	OptionSwitch(modifyCmd, "vnc-enable", "", "enable the integrated VNC server")
-	OptionSwitch(modifyCmd, "vnc-disable", "", "disable and remove VNC")
-	OptionString(modifyCmd, "vnc-port", "", "5900", "set the VNC server listen port")
+	OptionSwitch(modifyCmd, "vnc-enable", "", "enable instance VNC server")
+	OptionString(modifyCmd, "vnc-port", "", "5900", "VNC listen port")
+	OptionSwitch(modifyCmd, "vnc-disable", "", "disable VNC server")
 
-	OptionString(modifyCmd, "tty-pipe", "", "", "enable serial port on named pipe")
-	OptionSwitch(modifyCmd, "tty-disable", "", "disable serial port")
-	OptionString(modifyCmd, "tty-client", "", "", "instance is the client end")
-	OptionString(modifyCmd, "tty-app-mode", "", "", "configure for app interaction")
+	OptionString(modifyCmd, "tty-pipe", "", "", "enable serial port with named pipe")
+	OptionSwitch(modifyCmd, "tty-disable", "", "disable and remove serial port")
+	OptionSwitch(modifyCmd, "tty-client", "", "instance connects to pipe [default: instance creates pipe]")
+	OptionSwitch(modifyCmd, "tty-v2v", "", "configure for VM to VM connection")
 
-	OptionSwitch(modifyCmd, "boot-efi", "", "set EFI boot firmware")
-	OptionSwitch(modifyCmd, "boot-bios", "", "set BIOS boot firmware")
+	OptionSwitch(modifyCmd, "boot-efi", "", "select EFI boot firmware")
+	OptionSwitch(modifyCmd, "boot-bios", "", "select BIOS boot firmware")
 
-	OptionString(modifyCmd, "share-enable", "", "", "enable filesystem share 'host,guest'")
+	OptionString(modifyCmd, "share-enable", "", "", "enable filesystem share [format: 'host_path,guest_path']")
 	OptionSwitch(modifyCmd, "share-disable", "", "disable filesystem share")
+
+	OptionSwitch(modifyCmd, "clipboard-enable", "", "enable copy/paste/drag-and-drop")
+	OptionSwitch(modifyCmd, "clipboard-disable", "", "disable copy/paste/drag-and-drop")
 
 }

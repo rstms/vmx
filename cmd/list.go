@@ -35,7 +35,6 @@ import (
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var listCmd = &cobra.Command{
@@ -45,8 +44,9 @@ var listCmd = &cobra.Command{
 List host files.  If PATH is an instance name the instance directory is 
 selected.  If the first element in path is 'iso', the configured vmware_iso
 path is used as the root.
-Unless the --json flag is used, the output is the host's default directory
-list format.  Use --long for a long listing.
+
+The output is the host's default directory list format.  Use --long for a
+long listing.
 `,
 	Aliases: []string{"ls"},
 	Args:    cobra.RangeArgs(0, 1),
@@ -57,17 +57,14 @@ list format.  Use --long for a long listing.
 			vid = args[0]
 		}
 		options := workstation.FilesOptions{
-			Detail: viper.GetBool("long"),
+			Detail: ViperGetBool("long"),
+			All:    ViperGetBool("all"),
 			Iso:    workstation.IsIsoPath(vid),
 		}
-		lines, files, err := vmx.Files(vid, options)
+		lines, err := vmx.Files(vid, options)
 		cobra.CheckErr(err)
-		if OutputJSON {
-			if viper.GetBool("long") {
-				fmt.Println(FormatJSON(files))
-			} else {
-				fmt.Println(FormatJSON(lines))
-			}
+		if OutputJSON && !options.Detail {
+			fmt.Println(FormatJSON(lines))
 		} else {
 			for _, line := range lines {
 				fmt.Println(line)

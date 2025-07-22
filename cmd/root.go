@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/user"
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
@@ -64,14 +63,14 @@ Control VMWare Workstation instances
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		OutputJSON = true
 		OutputText = false
-		if viper.GetBool("text") {
+		if ViperGetBool("text") {
 			OutputText = true
 			OutputJSON = false
 		}
-		if viper.GetBool("no_wait") {
-			viper.Set("wait", false)
+		if ViperGetBool("no_wait") {
+			ViperSet("wait", false)
 		} else {
-			viper.Set("wait", true)
+			ViperSet("wait", true)
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -90,26 +89,21 @@ func Execute() {
 }
 func init() {
 	cobra.OnInitialize(InitConfig)
-	OptionString(rootCmd, "logfile", "", "", "log filename")
 	OptionString(rootCmd, "config", "c", "", "config file")
+	OptionString(rootCmd, "logfile", "", "", "log filename")
 	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
 	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
 	OptionString(rootCmd, "timeout", "t", "60", "wait timeout in seconds")
 	OptionString(rootCmd, "interval", "i", "1", "wait query interval in seconds")
-	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
-	OptionSwitch(rootCmd, "json", "", "format output as JSON")
+	OptionSwitch(rootCmd, "json", "", "format output as JSON (default)")
 	OptionSwitch(rootCmd, "text", "", "format output as text")
-	hostname, err := os.Hostname()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "host", "", hostname, "workstation hostname")
-	user, err := user.Current()
-	cobra.CheckErr(err)
-	OptionString(rootCmd, "user", "", user.Username, "workstation user")
+
 	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
 	OptionSwitch(rootCmd, "all", "a", "select all items")
 	OptionSwitch(rootCmd, "long", "l", "add output detail")
+
+	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
 	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for expected powerState after start/stop/kill")
-	OptionSwitch(rootCmd, "wait", "w", "wait for expected powerState after start/stop/kill")
 
 	OptionString(rootCmd, "iso", "", "", "CD/DVD ISO boot file or URL")
 	OptionString(rootCmd, "iso-ca", "", "", "CA for ISO URL download")
@@ -120,9 +114,14 @@ func init() {
 }
 
 func InitController() {
+	// copy selected cli config to vmx section
+	viper.Set("vmx.timeout", ViperGetInt("timeout"))
+	viper.Set("vmx.interval", ViperGetInt("interval"))
+	viper.Set("vmx.verbose", ViperGetBool("verbose"))
+	viper.Set("vmx.debug", ViperGetBool("debug"))
 	c, err := workstation.NewController()
 	cobra.CheckErr(err)
-	if viper.GetBool("verbose") {
+	if ViperGetBool("verbose") {
 		log.Printf("Controller: %s\n", FormatJSON(c))
 	}
 	vmx = c
@@ -138,8 +137,8 @@ func OutputInstanceState(vid, result string) {
 func InitIsoOptions() (*workstation.IsoOptions, error) {
 
 	options := workstation.IsoOptions{}
-	iso := viper.GetString("iso")
-	disable := viper.GetBool("iso_disable")
+	iso := ViperGetString("iso")
+	disable := ViperGetBool("iso_disable")
 	if (iso != "") && disable {
 		return nil, fmt.Errorf("conflict: iso/iso-disable")
 	}
@@ -149,14 +148,14 @@ func InitIsoOptions() (*workstation.IsoOptions, error) {
 		options.IsoPresent = true
 		options.IsoFile = iso
 		options.IsoBootConnected = true
-		options.IsoCA = viper.GetString("iso_ca")
-		options.IsoClientCert = viper.GetString("iso_cert")
-		options.IsoClientKey = viper.GetString("iso_key")
+		options.IsoCA = ViperGetString("iso_ca")
+		options.IsoClientCert = ViperGetString("iso_cert")
+		options.IsoClientKey = ViperGetString("iso_key")
 	case disable:
 		options.ModifyISO = true
 		options.IsoPresent = false
 	}
-	if viper.GetBool("iso_detach") {
+	if ViperGetBool("iso_detach") {
 		options.ModifyISO = true
 		options.IsoBootConnected = false
 	}

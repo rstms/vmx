@@ -35,7 +35,6 @@ import (
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var showCmd = &cobra.Command{
@@ -53,8 +52,8 @@ Display VM instance data
 			vid = args[0]
 		}
 		options := workstation.ShowOptions{
-			Detail:  viper.GetBool("long"),
-			Running: !viper.GetBool("all"),
+			Detail:  ViperGetBool("long"),
+			Running: !ViperGetBool("all"),
 		}
 		vms, err := vmx.Show(vid, options)
 		cobra.CheckErr(err)

@@ -3,7 +3,6 @@ package workstation
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"log"
 	"os"
 	"regexp"
@@ -18,25 +17,23 @@ numvcpus = "${CpuCount}"
 memsize = "${MemorySize}"
 guestOS = "${GuestOS}"
 pciBridge0.present = "TRUE"
+pciBridge4.functions = "8"
 pciBridge4.present = "TRUE"
 pciBridge4.virtualDev = "pcieRootPort"
-pciBridge4.functions = "8"
+pciBridge5.functions = "8"
 pciBridge5.present = "TRUE"
 pciBridge5.virtualDev = "pcieRootPort"
-pciBridge5.functions = "8"
+pciBridge6.functions = "8"
 pciBridge6.present = "TRUE"
 pciBridge6.virtualDev = "pcieRootPort"
-pciBridge6.functions = "8"
+pciBridge7.functions = "8"
 pciBridge7.present = "TRUE"
 pciBridge7.virtualDev = "pcieRootPort"
-pciBridge7.functions = "8"
 nvme0.present = "TRUE"
 nvme0:0.fileName = "${VMDKFile}"
 nvme0:0.present = "TRUE"
-floppy0.present = "FALSE"
 ide1:0.present = "FALSE"
 ethernet0.present = "FALSE"
-vmx.scoreboard.enabled = "FALSE"
 tools.syncTime = "${HostTimeSync}"
 time.synchronize.continue = "${HostTimeSync}"
 time.synchronize.restore = "${HostTimeSync}"
@@ -44,9 +41,6 @@ time.synchronize.resume.disk = "${HostTimeSync}"
 time.synchronize.shrink = "${HostTimeSync}"
 time.synchronize.tools.startup = "${HostTimeSync}"
 guestTimeZone = "${GuestTimeZone}"
-isolation.tools.dnd.disable = "${EnableDragAndDrop}"
-isolation.tools.copy.disable = "${EnableClipboard}"
-isolation.tools.paste.disable = "${EnableClipboard}"
 `
 
 var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
@@ -78,8 +72,8 @@ func GenerateVMX(os, name string, options *CreateOptions, isoOptions *IsoOptions
 	vmx := VMX{
 		name:    name,
 		hostOS:  os,
-		debug:   viper.GetBool("debug"),
-		verbose: viper.GetBool("verbose"),
+		debug:   ViperGetBool("debug"),
+		verbose: ViperGetBool("verbose"),
 	}
 
 	err := vmx.Generate(options, isoOptions)
@@ -141,11 +135,21 @@ func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) error {
 		return err
 	}
 	// FIXME: CreateOptions needs flags for client-mode, other-end-is-an-app
-	_, err = v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialAppMode)
+	_, err = v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
 	if err != nil {
 		return err
 	}
 	_, err = v.SetVNC(options.VNCEnabled, options.VNCPort)
+	if err != nil {
+		return err
+	}
+
+	_, err = v.SetClipboard(options.ClipboardEnabled)
+	if err != nil {
+		return err
+	}
+
+	_, err = v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
 	if err != nil {
 		return err
 	}
@@ -301,9 +305,9 @@ func (v *VMX) SetEthernet(mac string) (string, error) {
 
 }
 
-func (v *VMX) SetSerial(pipe string, isClient, appMode bool) (string, error) {
+func (v *VMX) SetSerial(pipe string, isClient, isV2V bool) (string, error) {
 	if v.debug {
-		log.Printf("SetSerial(%s, %v, %v)\n", pipe, isClient, appMode)
+		log.Printf("SetSerial(%s, %v, %v)\n", pipe, isClient, isV2V)
 	}
 	v.removePrefix("serial0.")
 	if pipe == "" {
@@ -339,8 +343,11 @@ func (v *VMX) SetSerial(pipe string, isClient, appMode bool) (string, error) {
 		hostPipe = strings.ReplaceAll(normalized, "/", "\\")
 	}
 
-	ttyMode := "vm"
-	if appMode {
+	var ttyMode string
+	if isV2V {
+		ttyMode = "v2v"
+		v.addLine(`serial0.tryNoRxLoss = "FALSE"`)
+	} else {
 		ttyMode = "app"
 		v.addLine(`serial0.tryNoRxLoss = "TRUE"`)
 	}
@@ -353,7 +360,7 @@ func (v *VMX) SetSerial(pipe string, isClient, appMode bool) (string, error) {
 		ttyEnd = "client"
 	}
 
-	return fmt.Sprintf("set tty %s %s named pipe: %s", ttyMode, ttyEnd, hostPipe), nil
+	return fmt.Sprintf("set tty %s %s pipe %s", ttyMode, ttyEnd, hostPipe), nil
 }
 
 // fixme: VNC password
@@ -373,6 +380,26 @@ func (v *VMX) SetVNC(enabled bool, port int) (string, error) {
 	return fmt.Sprintf("enabled VNC on port %d", port), nil
 }
 
+func (v *VMX) SetClipboard(enable bool) (string, error) {
+	if v.debug {
+		log.Printf("SetClipboard(%v)\n", enable)
+	}
+	v.removePrefix("isolation.tools.copy")
+	v.removePrefix("isolation.tools.pase")
+	v.removePrefix("isolation.tools.dnd")
+
+	value := "TRUE"
+	action := "disabled clipboard"
+	if enable {
+		value = "FALSE"
+		action = "enabled clipboard"
+	}
+	v.addLine(fmt.Sprintf(`isolation.tools.copy.disable = "%s"`, value))
+	v.addLine(fmt.Sprintf(`isolation.tools.paste.disable = "%s"`, value))
+	v.addLine(fmt.Sprintf(`isolation.tools.dnd.disable = "%s"`, value))
+	return action, nil
+}
+
 /*
 > isolation.tools.hgfs.disable = "FALSE"
 > sharedFolder0.present = "TRUE"
@@ -384,24 +411,32 @@ func (v *VMX) SetVNC(enabled bool, port int) (string, error) {
 > sharedFolder0.expiration = "never"
 > sharedFolder.maxNum = "1"
 */
-func (v *VMX) SetShare(hostPath, guestPath string) (string, error) {
+func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, error) {
 	if v.debug {
-		log.Printf("SetShare(%s, %s)\n", hostPath, guestPath)
+		log.Printf("SetFileShare(%v, %s, %s)\n", enable, hostPath, guestPath)
 	}
 
-	if hostPath != "" {
-		formatted, err := PathFormat(v.hostOS, hostPath)
-		if err != nil {
-			return "", err
-		}
-		hostPath = formatted
-	}
 	v.removePrefix("sharedFolder")
 	v.removePrefix("isolation.tools.hgfs.")
-	if hostPath == "" {
+	if !enable {
 		v.addLine(`isolation.tools.hgfs.disable = "TRUE"`)
 		return "disabled filesystem share", nil
 	}
+
+	formatted, err := PathFormat(v.hostOS, hostPath)
+	if err != nil {
+		return "", err
+	}
+	hostPath = formatted
+
+	if hostPath == "" {
+		return "", fmt.Errorf("missing filesystem share host path")
+	}
+
+	if guestPath == "" {
+		return "", fmt.Errorf("missing filesystem share guest path")
+	}
+
 	v.addLine(`isolation.tools.hgfs.disable = "FALSE"`)
 	v.addLine(`sharedFolder0.present = "TRUE"`)
 	v.addLine(`sharedFolder0.enabled = "TRUE"`)
@@ -411,5 +446,5 @@ func (v *VMX) SetShare(hostPath, guestPath string) (string, error) {
 	v.addLine(fmt.Sprintf(`sharedFolder0.hostPath = "%s"`, hostPath))
 	v.addLine(`sharedFolder0.expiration = "never"`)
 	v.addLine(`sharedFolder0.maxNum = "1"`)
-	return fmt.Sprintf("enabled filesystem share host='%s' guest='%s'", hostPath, guestPath), nil
+	return fmt.Sprintf("enabled filesystem share: host=%s guest=%s", hostPath, guestPath), nil
 }

@@ -26,27 +26,20 @@ type WinExecResponse struct {
 }
 
 func NewWinExecClient() (*WinExecClient, error) {
-	url := viper.GetString("winexec_url")
-	_, cert, err := GetViperPath("winexec_cert")
-	if err != nil {
-		return nil, err
-	}
-	_, key, err := GetViperPath("winexec_key")
-	if err != nil {
-		return nil, err
-	}
-	_, ca, err := GetViperPath("winexec_ca")
-	if err != nil {
-		return nil, err
-	}
+
+	url := viper.GetString("winexec.url")
+	cert := viper.GetString("winexec.cert")
+	key := viper.GetString("winexec.key")
+	ca := viper.GetString("winexec.ca")
+
 	api, err := NewAPIClient(url, cert, key, ca, nil)
 	if err != nil {
 		return nil, err
 	}
 	client := WinExecClient{
 		api:     api,
-		verbose: viper.GetBool("verbose"),
-		debug:   viper.GetBool("debug"),
+		verbose: viper.GetBool("winexec.verbose"),
+		debug:   viper.GetBool("winexec.debug"),
 	}
 	return &client, nil
 

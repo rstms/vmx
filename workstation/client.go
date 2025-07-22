@@ -10,11 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 type APIClient struct {
@@ -25,35 +21,16 @@ type APIClient struct {
 	debug   bool
 }
 
-func GetViperPath(key string) (bool, string, error) {
-	path := viper.GetString(key)
-	if path == "" {
-		return false, "", nil
-	}
-	if len(path) < 2 {
-		return false, "", fmt.Errorf("path %s too short: %s", key, path)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false, "", err
-	}
-	if strings.HasPrefix(path, "~") {
-		path = filepath.Join(home, path[1:])
-	}
-	return true, path, nil
-
-}
-
 func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]string) (*APIClient, error) {
 
-	viper.SetDefault("disable_keepalives", true)
-	viper.SetDefault("idle_conn_timeout", 5)
+	ViperSetDefault("disable_keepalives", true)
+	ViperSetDefault("idle_conn_timeout", 5)
 
 	api := APIClient{
 		URL:     url,
 		Headers: make(map[string]string),
-		verbose: viper.GetBool("verbose"),
-		debug:   viper.GetBool("debug"),
+		verbose: ViperGetBool("verbose"),
+		debug:   ViperGetBool("debug"),
 	}
 
 	if headers != nil {
@@ -63,8 +40,8 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 	}
 
 	transport := http.Transport{
-		IdleConnTimeout:   time.Duration(viper.GetInt64("idle_conn_timeout")) * time.Second,
-		DisableKeepAlives: viper.GetBool("disable_keepalives"),
+		IdleConnTimeout:   time.Duration(ViperGetInt64("idle_conn_timeout")) * time.Second,
+		DisableKeepAlives: ViperGetBool("disable_keepalives"),
 	}
 
 	if certFile != "" || keyFile != "" || caFile != "" {
@@ -73,12 +50,12 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 			return nil, fmt.Errorf("incomplete TLS config: cert=%s key=%s ca=%s\n", certFile, keyFile, caFile)
 		}
 
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		cert, err := tls.LoadX509KeyPair(os.ExpandEnv(certFile), os.ExpandEnv(keyFile))
 		if err != nil {
 			return nil, fmt.Errorf("error loading client certificate pair: %v", err)
 		}
 
-		caCert, err := ioutil.ReadFile(caFile)
+		caCert, err := ioutil.ReadFile(os.ExpandEnv(caFile))
 		if err != nil {
 			return nil, fmt.Errorf("error loading certificate authority file: %v", err)
 		}

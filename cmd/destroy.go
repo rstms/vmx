@@ -38,7 +38,6 @@ import (
 
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var destroyCmd = &cobra.Command{
@@ -58,7 +57,7 @@ to quickly create a Cobra application.`,
 		cobra.CheckErr(err)
 		if confirm(fmt.Sprintf("Confirm IRRECOVERABLE DESTRUCTION of VM instance '%s'", vm.Name)) {
 			options := workstation.DestroyOptions{
-				Force: viper.GetBool("kill"),
+				Force: ViperGetBool("kill"),
 			}
 			err := vmx.Destroy(vm.Id, options)
 			cobra.CheckErr(err)
@@ -73,7 +72,7 @@ to quickly create a Cobra application.`,
 }
 
 func confirm(prompt string) bool {
-	if viper.GetBool("force") {
+	if ViperGetBool("force") {
 		return true
 	}
 	reader := bufio.NewReader(os.Stdin)

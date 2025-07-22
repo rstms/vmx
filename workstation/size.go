@@ -2,7 +2,6 @@ package workstation
 
 import (
 	"fmt"
-	"github.com/spf13/viper"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,7 +51,7 @@ func SizeParse(param string) (int64, error) {
 }
 
 func FormatSize(size int64) string {
-	if viper.GetBool("no_humanize") {
+	if ViperGetBool("no_humanize") {
 		return fmt.Sprintf("%d", size)
 	}
 	suffix := ""

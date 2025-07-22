@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,20 +12,14 @@ import (
 type VMConfig map[string]any
 
 type vmcli struct {
-	v       *vmctl
-	ByPath  map[string]VID
-	ByName  map[string]VID
-	ById    map[string]VID
-	verbose bool
-	debug   bool
+	v      *vmctl
+	ByPath map[string]VID
+	ByName map[string]VID
+	ById   map[string]VID
 }
 
 func NewCliClient(v *vmctl) *vmcli {
-	c := vmcli{
-		v:       v,
-		verbose: viper.GetBool("verbose"),
-		debug:   viper.GetBool("debug"),
-	}
+	c := vmcli{v: v}
 	return &c
 }
 
@@ -35,7 +28,7 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 	if err != nil {
 		return err
 	}
-	olines, err := c.v.RemoteExec(command+" "+path, nil)
+	olines, err := c.v.RemoteExec(fmt.Sprintf("vmcli %s %s", command, path), nil)
 	if err != nil {
 		return err
 	}
@@ -50,44 +43,57 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 }
 
 func (c *vmcli) GetVIDs() ([]VID, error) {
+	c.Reset()
 	vids := []VID{}
-	path, err := PathFormat(c.v.Remote, c.v.Path)
+	for _, path := range c.v.Roots {
+		err := c.getPathVIDs(path)
+		if err != nil {
+			return vids, err
+		}
+	}
+	for _, vid := range c.ByPath {
+		vids = append(vids, vid)
+	}
+	return vids, nil
+}
+
+func (c *vmcli) getPathVIDs(path string) error {
+	hostPath, err := PathFormat(c.v.Remote, path)
 	if err != nil {
-		return vids, nil
+		return nil
 	}
 	files := make(map[string]bool)
 	switch c.v.Remote {
 	case "windows":
-		command := "dir /B /AD " + path
+		command := "dir /B /AD " + hostPath
 		dirs, err := c.v.RemoteExec(command, nil)
 		if err != nil {
-			return vids, err
+			return err
 		}
 		for _, dir := range dirs {
 			dir = strings.TrimSpace(dir)
 			if dir != "" {
-				files[filepath.Join(c.v.Path, dir, dir+".vmx")] = true
+				files[filepath.Join(path, dir, dir+".vmx")] = true
 			}
 		}
 	default:
-		command := fmt.Sprintf("find %s -maxdepth 2 -type f -name '*.vmx'", path)
+		command := fmt.Sprintf("find %s -maxdepth 2 -type f -name '*.vmx'", hostPath)
 		lines, err := c.v.RemoteExec(command, nil)
 		if err != nil {
-			return vids, err
+			return err
 		}
 		for _, line := range lines {
 			files[line] = true
 		}
 	}
-	c.Reset()
 	for file, _ := range files {
 		path, err := PathNormalize(file)
 		if err != nil {
-			return vids, err
+			return err
 		}
 		name, err := PathToName(file)
 		if err != nil {
-			return vids, err
+			return err
 		}
 		vid := VID{
 			Name: name,
@@ -97,9 +103,8 @@ func (c *vmcli) GetVIDs() ([]VID, error) {
 		c.ById[vid.Id] = vid
 		c.ByName[vid.Name] = vid
 		c.ByPath[vid.Path] = vid
-		vids = append(vids, vid)
 	}
-	return vids, nil
+	return nil
 }
 
 func (c *vmcli) Reset() {
@@ -174,23 +179,23 @@ func (c *vmcli) GetConfig(vm *VM) error {
 	if err != nil {
 		return err
 	}
-	vm.CpuCount, err = c.IntValue(config, "numvcpus", true)
+	vm.CpuCount, err = c.GetInt(config, "numvcpus", true)
 	if err != nil {
 		return err
 	}
-	vm.RamSize, err = c.SizeValue(config, "memsize", true)
+	vm.RamSize, err = c.GetSize(config, "memsize", true)
 	if err != nil {
 		return err
 	}
-	vm.IsoFile, err = c.PathValue(config, "ide1:0.filename", false)
+	vm.IsoFile, err = c.GetPath(config, "ide1:0.filename", false)
 	if err != nil {
 		return err
 	}
-	vm.IsoAttached, err = c.BoolValue(config, "ide1:0.present", false)
+	vm.IsoAttached, err = c.GetBool(config, "ide1:0.present", false)
 	if err != nil {
 		return err
 	}
-	vm.IsoAttachOnStart, err = c.BoolValue(config, "ide1:0.startConnected", false)
+	vm.IsoAttachOnStart, err = c.GetBool(config, "ide1:0.startConnected", false)
 	if err != nil {
 		return err
 	}
@@ -198,42 +203,43 @@ func (c *vmcli) GetConfig(vm *VM) error {
 	if err != nil {
 		return err
 	}
-	vm.SerialAttached, err = c.BoolValue(config, "serial0.present", false)
+	vm.SerialAttached, err = c.GetBool(config, "serial0.present", false)
 	if err != nil {
 		return err
 	}
-	vm.SerialPipe, err = c.PathValue(config, "serial0.fileName", false)
+	vm.SerialPipe, err = c.GetPath(config, "serial0.fileName", false)
 	if err != nil {
 		return err
 	}
-	vm.VncEnabled, err = c.BoolValue(config, "RemoteDisplay.vnc.enabled", false)
+	vm.VncEnabled, err = c.GetBool(config, "RemoteDisplay.vnc.enabled", false)
 	if err != nil {
 		return err
 	}
-	vm.VncPort, err = c.IntValue(config, "RemoteDisplay.vnc.port", false)
+	vm.VncPort, err = c.GetInt(config, "RemoteDisplay.vnc.port", false)
 	if err != nil {
 		return err
 	}
-	copyDisabled, err := c.BoolValue(config, "isolation.tools.copy.disable", false)
+	copyDisabled, err := c.GetBool(config, "isolation.tools.copy.disable", false)
 	if err != nil {
 		return err
 	}
-	vm.EnableCopy = !copyDisabled
-	pasteDisabled, err := c.BoolValue(config, "isolation.tools.paste.disable", false)
+	pasteDisabled, err := c.GetBool(config, "isolation.tools.paste.disable", false)
 	if err != nil {
 		return err
 	}
-	vm.EnablePaste = !pasteDisabled
-	dndDisabled, err := c.BoolValue(config, "isolation.tools.dnd.disable", false)
+	dndDisabled, err := c.GetBool(config, "isolation.tools.dnd.disable", false)
 	if err != nil {
 		return err
 	}
-	vm.EnableDragAndDrop = !dndDisabled
-	shareDisabled, err := c.BoolValue(config, "isolation.tools.hgfs.disable", false)
+	shareDisabled, err := c.GetBool(config, "isolation.tools.hgfs.disable", false)
 	if err != nil {
 		return err
 	}
-	vm.EnableFilesystemShare = !shareDisabled
+	vm.FileShareEnabled = !shareDisabled
+	vm.ClipboardEnabled = true
+	if copyDisabled && pasteDisabled && dndDisabled {
+		vm.ClipboardEnabled = false
+	}
 
 	return nil
 }
@@ -252,7 +258,7 @@ func (c *vmcli) GetParam(vm *VM, name string) (string, error) {
 }
 
 func (c *vmcli) SetParam(vm *VM, name, value string) error {
-	command := fmt.Sprintf("vmcli configParams SetEntry %s %s", name, value)
+	command := fmt.Sprintf("configParams SetEntry %s %s", name, value)
 	err := c.exec(vm, command, nil)
 	if err != nil {
 		return err
@@ -262,7 +268,7 @@ func (c *vmcli) SetParam(vm *VM, name, value string) error {
 
 func (c *vmcli) QueryPowerState(vm *VM) error {
 	var state struct{ PowerState string }
-	err := c.exec(vm, "vmcli power query -f json", &state)
+	err := c.exec(vm, "power query -f json", &state)
 	if err != nil {
 		return err
 	}
@@ -273,7 +279,7 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 
 func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 	var params VMConfig
-	err := c.exec(vm, "vmcli configParams query -f json", &params)
+	err := c.exec(vm, "configParams query -f json", &params)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +294,7 @@ func value(config *VMConfig, key string) (any, error) {
 	return v, nil
 }
 
-func (c *vmcli) SizeValue(config *VMConfig, key string, required bool) (string, error) {
+func (c *vmcli) GetSize(config *VMConfig, key string, required bool) (string, error) {
 	value, err := value(config, key)
 	if err != nil {
 		if required {
@@ -312,7 +318,7 @@ func (c *vmcli) SizeValue(config *VMConfig, key string, required bool) (string, 
 	return FormatSize(size * MB), nil
 }
 
-func (c *vmcli) IntValue(config *VMConfig, key string, required bool) (int, error) {
+func (c *vmcli) GetInt(config *VMConfig, key string, required bool) (int, error) {
 	value, err := value(config, key)
 	if err != nil {
 		if required {
@@ -334,7 +340,7 @@ func (c *vmcli) IntValue(config *VMConfig, key string, required bool) (int, erro
 	}
 }
 
-func (c *vmcli) StringValue(config *VMConfig, key string, required bool) (string, error) {
+func (c *vmcli) GetString(config *VMConfig, key string, required bool) (string, error) {
 	value, err := value(config, key)
 	if err != nil {
 		if required {
@@ -352,8 +358,8 @@ func (c *vmcli) StringValue(config *VMConfig, key string, required bool) (string
 	}
 }
 
-func (c *vmcli) PathValue(config *VMConfig, key string, required bool) (string, error) {
-	value, err := c.StringValue(config, key, required)
+func (c *vmcli) GetPath(config *VMConfig, key string, required bool) (string, error) {
+	value, err := c.GetString(config, key, required)
 	if err != nil {
 		return "", err
 	}
@@ -364,7 +370,7 @@ func (c *vmcli) PathValue(config *VMConfig, key string, required bool) (string, 
 	return path, nil
 }
 
-func (c *vmcli) BoolValue(config *VMConfig, key string, required bool) (bool, error) {
+func (c *vmcli) GetBool(config *VMConfig, key string, required bool) (bool, error) {
 	value, err := value(config, key)
 	if err != nil {
 		if required {
@@ -400,7 +406,7 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 		config = c
 	}
 	key := "ethernet0.addressType"
-	addressType, err := c.StringValue(config, key, false)
+	addressType, err := c.GetString(config, key, false)
 	if err != nil {
 		return err
 	}
@@ -412,10 +418,85 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 	if addressType == "static" {
 		key = "ethernet0.address"
 	}
-	addr, err := c.StringValue(config, key, true)
+	addr, err := c.GetString(config, key, true)
 	if err != nil {
 		return err
 	}
 	vm.MacAddress = addr
+	return nil
+}
+
+func (c *vmcli) GetIsoOptions(vm *VM, options *IsoOptions) error {
+	config, err := c.GetParams(vm)
+	if err != nil {
+		return err
+	}
+	options.ModifyISO = true
+	options.IsoPresent, err = c.GetBool(config, "ide1:0.present", false)
+	if err != nil {
+		return err
+	}
+	options.IsoFile, err = c.GetPath(config, "ide1:0.fileName", false)
+	if err != nil {
+		return err
+	}
+	options.IsoBootConnected, err = c.GetBool(config, "ide1:0.startConnected", false)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *vmcli) GetIsoStartConnected(vm *VM) (bool, error) {
+	config, err := c.GetParams(vm)
+	if err != nil {
+		return false, err
+	}
+	connected, err := c.GetBool(config, "ide1:0.startConnected", false)
+	if err != nil {
+		return false, err
+	}
+	return connected, nil
+}
+
+func (c *vmcli) SetIsoStartConnected(vm *VM, connected bool) error {
+	label := "ide1:0"
+	command := fmt.Sprintf("disk setStartConnected %s %v", label, connected)
+	err := c.exec(vm, command, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
+	label := "ide1:0"
+
+	path, err := PathFormat(c.v.Remote, options.IsoFile)
+	if err != nil {
+		return err
+	}
+
+	command := fmt.Sprintf("disk setPresent %s %v", label, options.IsoPresent)
+	err = c.exec(vm, command, nil)
+	if err != nil {
+		return err
+	}
+
+	if !options.IsoPresent {
+		return nil
+	}
+
+	command = fmt.Sprintf("disk setBackingInfo %s cdrom_image %s false", label, path)
+	err = c.exec(vm, command, nil)
+	if err != nil {
+		return err
+	}
+
+	command = fmt.Sprintf("disk setStartConnected %s %v", label, options.IsoBootConnected)
+	err = c.exec(vm, command, nil)
+	if err != nil {
+		return err
+	}
 	return nil
 }

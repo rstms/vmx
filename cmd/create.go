@@ -33,7 +33,6 @@ package cmd
 import (
 	"github.com/rstms/vmx/workstation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var createCmd = &cobra.Command{
@@ -51,27 +50,26 @@ unless specified with option flags.
 
 		options := workstation.NewCreateOptions()
 
-		options.Wait = viper.GetBool("wait")
-		options.CpuCount = viper.GetInt("cpu")
-		options.MemorySize = viper.GetString("ram")
-		options.DiskSize = viper.GetString("disk")
-		options.DiskPreallocated = viper.GetBool("preallocate")
-		options.DiskSingleFile = viper.GetBool("single_file")
-		options.EFIBoot = viper.GetBool("efi")
-		options.HostTimeSync = viper.GetBool("time_sync")
-		options.GuestTimeZone = viper.GetString("timezone")
-		options.DisableDragAndDrop = !viper.GetBool("drag_and_drop")
-		options.DisableClipboard = !viper.GetBool("clipboard")
-		options.MacAddress = viper.GetString("mac")
+		options.Wait = ViperGetBool("wait")
+		options.CpuCount = ViperGetInt("cpu")
+		options.MemorySize = ViperGetString("ram")
+		options.DiskSize = ViperGetString("disk")
+		options.DiskPreallocated = ViperGetBool("preallocate")
+		options.DiskSingleFile = ViperGetBool("single_file")
+		options.EFIBoot = ViperGetBool("efi")
+		options.HostTimeSync = ViperGetBool("time_sync")
+		options.GuestTimeZone = ViperGetString("timezone")
+		options.ClipboardEnabled = ViperGetBool("clipboard")
+		options.MacAddress = ViperGetString("mac")
 
 		switch {
-		case viper.GetBool("openbsd"):
+		case ViperGetBool("openbsd"):
 			options.GuestOS = "openbsd"
-		case viper.GetBool("debian"):
+		case ViperGetBool("debian"):
 			options.GuestOS = "debian"
-		case viper.GetBool("windows"):
+		case ViperGetBool("windows"):
 			options.GuestOS = "windows"
-		case viper.GetBool("ubuntu"):
+		case ViperGetBool("ubuntu"):
 			options.GuestOS = "ubuntu"
 		default:
 			options.GuestOS = "other"
@@ -95,11 +93,8 @@ func init() {
 	OptionString(createCmd, "disk", "", "16G", "disk size")
 	OptionString(createCmd, "timezone", "", "UTC", "guest time zone")
 	OptionString(createCmd, "mac", "", "auto", "MAC address")
-	OptionString(createCmd, "iso", "", "", "boot ISO pathname or URL")
-	OptionSwitch(createCmd, "detach-iso", "", "detach ISO at boot")
 	OptionSwitch(createCmd, "efi", "", "EFI boot")
 	OptionSwitch(createCmd, "time-sync", "", "enable time sync with host")
-	OptionSwitch(createCmd, "drag-and-drop", "", "enable drag-and-drop")
 	OptionSwitch(createCmd, "clipboard", "", "enable clipboard sharing with host")
 	OptionSwitch(createCmd, "single-file", "", "create single-file VMDK disk")
 	OptionSwitch(createCmd, "preallocated", "", "pre-allocate VMDK disk")

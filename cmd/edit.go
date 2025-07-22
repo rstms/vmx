@@ -39,7 +39,6 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const MAX_BACKUP_FILES = 10
@@ -63,7 +62,7 @@ directory.
 		vm, err := vmx.Get(vid)
 		cobra.CheckErr(err)
 
-		backupDir := viper.GetString("backup_dir")
+		backupDir := ViperGetString("backup_dir")
 		if backupDir == "" {
 			backupDir = filepath.Join(".", "backup")
 		}
