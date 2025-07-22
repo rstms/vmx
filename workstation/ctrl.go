@@ -72,19 +72,6 @@ type VM struct {
 	PowerState string
 }
 
-type DestroyOptions struct {
-	Force bool
-	Wait  bool
-}
-
-type StartOptions struct {
-	Background     bool
-	FullScreen     bool
-	Wait           bool
-	ModifyStretch  bool
-	StretchEnabled bool
-}
-
 type StopOptions struct {
 	PowerOff bool
 	Wait     bool
@@ -325,49 +312,6 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 	return vms, nil
 }
 
-func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
-	if v.debug {
-		log.Printf("Destroy: %s %+v\n", vid, options)
-	}
-	vm, err := v.Get(vid)
-	if err != nil {
-		return err
-	}
-	err = v.cli.QueryPowerState(&vm)
-	if err != nil {
-		return err
-	}
-	if vm.PowerState != "off" {
-		if options.Force {
-			_, err := v.Stop(vid, StopOptions{PowerOff: true, Wait: true})
-			if err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("[%s] --kill required; power state is '%s'", vm.Name, vm.PowerState)
-		}
-
-	}
-	dir, _ := filepath.Split(vm.Path)
-	hostPath, err := PathFormat(v.Remote, dir)
-	if err != nil {
-		return err
-	}
-	hostPath = strings.TrimRight(hostPath, "/\\")
-	var command string
-	switch v.Remote {
-	case "windows":
-		command = "rmdir /S /Q " + hostPath
-	default:
-		command = "rm -rf " + hostPath
-	}
-	_, err = v.RemoteExec(command, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (v *vmctl) requirePowerState(vm *VM, state, action string) error {
 	err := v.cli.QueryPowerState(vm)
 	if err != nil {
@@ -399,99 +343,6 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
-}
-
-func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
-	if v.debug {
-		log.Printf("Start(%s, %+v)\n", vid, options)
-	}
-	vm, err := v.cli.GetVM(vid)
-	if err != nil {
-		return "", err
-	}
-	ok, err := v.checkPowerState(&vm, "start", "on")
-	if err != nil {
-		return "", err
-	}
-	if ok {
-		return "already started", nil
-	}
-
-	var savedBootConnected bool
-	if isoOptions.ModifyISO {
-		savedBootConnected, err = v.cli.GetIsoStartConnected(&vm)
-		if err != nil {
-			return "", err
-		}
-		_, err = v.Modify(vid, CreateOptions{}, isoOptions)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	path, err := PathFormat(v.Remote, vm.Path)
-	if err != nil {
-		return "", err
-	}
-	command := ""
-	var visibility string
-	if options.FullScreen {
-		if v.Remote == "windows" {
-			command = "start vmware >nul 2>nul -n -q -X " + path
-		} else {
-			command = "vmware -n -q -X " + path + "&"
-		}
-		visibility = "fullscreen"
-	} else {
-		// TODO: add '-vp password' to vmrun command for encrypted VMs
-		command = "vmrun -T ws start " + path
-		if options.Background {
-			visibility = "background"
-			command += " nogui"
-		} else {
-			visibility = "windowed"
-			command += " gui"
-		}
-	}
-
-	if options.ModifyStretch {
-		err = v.setStretch(&vm, options.StretchEnabled)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	if v.verbose {
-		fmt.Printf("[%s] requesting %s start...\n", vm.Name, visibility)
-	}
-
-	err = v.RemoteSpawn(command, nil)
-	if err != nil {
-		return "", err
-	}
-	if v.verbose {
-		fmt.Printf("[%s] start request complete\n", vm.Name)
-	}
-
-	if options.Wait {
-		err := v.Wait(vid, "on")
-		if err != nil {
-			return "", err
-		}
-
-		if isoOptions.ModifyISO {
-			log.Printf("[%s] saved ISO BootConnected state: %v\n", vm.Name, savedBootConnected)
-			if savedBootConnected != isoOptions.IsoBootConnected {
-				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
-				if err != nil {
-					return "", err
-				}
-			}
-		}
-
-		return "started", nil
-	}
-	return "start pending", nil
 }
 
 func (v *vmctl) setStretch(vm *VM, enabled bool) error {
