@@ -16,8 +16,11 @@ type CreateOptions struct {
 	DiskPreallocated bool
 	DiskSingleFile   bool
 
-	HostTimeSync  bool
-	GuestTimeZone string
+	ModifyTimeSync bool
+	HostTimeSync   bool
+
+	ModifyTimeZone bool
+	GuestTimeZone  string
 
 	ModifyClipboard  bool
 	ClipboardEnabled bool
@@ -88,13 +91,12 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 
 	// create instance directory
 	dir, _ := filepath.Split(vm.Path)
-	hostPath, err := PathnameFormat(v.Remote, dir)
+	hostPath, err := PathFormat(v.Remote, dir)
 	if err != nil {
 		return vm, err
 	}
 	mkdirCommand := "mkdir " + hostPath
-	log.Printf("create mkdir command: %s\n", mkdirCommand)
-	panic("howdy")
+	//log.Printf("create mkdir command: %s\n", mkdirCommand)
 	_, err = v.RemoteExec(mkdirCommand, nil)
 	if err != nil {
 		return vm, err

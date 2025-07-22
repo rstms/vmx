@@ -7,15 +7,15 @@ import (
 
 func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions) (*[]string, error) {
 	if v.debug {
-		log.Printf("Modify(%s, %+v, %+v)\n", vid, options, isoOptions)
+		log.Printf("Modify(%s, options, isoOptions)\n", vid)
 		out, err := FormatJSON(&options)
 		if err != nil {
-			return nil, err
+			log.Fatal(err)
 		}
 		log.Printf("CreateOptions: %s\n", out)
 		out, err = FormatJSON(&isoOptions)
 		if err != nil {
-			return nil, err
+			log.Fatal(err)
 		}
 		log.Printf("IsoOptions: %s\n", out)
 	}
@@ -36,11 +36,7 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 	if err != nil {
 		return nil, err
 	}
-	vmx, err := GenerateVMX(v.Remote, vm.Name, NewCreateOptions(), nil)
-	if err != nil {
-		return nil, err
-	}
-	err = vmx.Write(hostData)
+	vmx, err := InitVMX(v.Remote, vm.Name, hostData)
 	if err != nil {
 		return nil, err
 	}

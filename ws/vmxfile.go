@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -12,10 +11,10 @@ import (
 const vmxTemplate string = `.encoding = "UTF-8"
 config.version = "8"
 virtualHW.version = "19"
-displayName = "${Name}"
-numvcpus = "${CpuCount}"
-memsize = "${MemorySize}"
-guestOS = "${GuestOS}"
+displayName = "${displayName}"
+numvcpus = "${numvcpus}"
+memsize = "${memsize}"
+guestOS = "${guestOS}"
 pciBridge0.present = "TRUE"
 pciBridge4.functions = "8"
 pciBridge4.present = "TRUE"
@@ -35,83 +34,103 @@ nvme0:0.present = "TRUE"
 floppy0.present = "FALSE"
 ide1:0.present = "FALSE"
 ethernet0.present = "FALSE"
-tools.syncTime = "${HostTimeSync}"
-time.synchronize.continue = "${HostTimeSync}"
-time.synchronize.restore = "${HostTimeSync}"
-time.synchronize.resume.disk = "${HostTimeSync}"
-time.synchronize.shrink = "${HostTimeSync}"
-time.synchronize.tools.startup = "${HostTimeSync}"
-guestTimeZone = "${GuestTimeZone}"
 `
 
 var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
 
-var VMGuestOSValues map[string]string = map[string]string{
-	"other":   "other-64",
-	"openbsd": "other-64",
-	"windows": "windows9-64",
-	"ubuntu":  "ubuntu-64",
-	"debian":  "debian10-64",
-	"linux5":  "other5xlinux-64",
-	"linux4":  "other4xlinux-64",
+// OS names generated using the error message from this command:
+// 'vmcli VM create -n notavalidname -d /notavaliddir -g notavalidosname
+
+var VMGuestOSValues map[string]bool = map[string]bool{
+	"debian12-64":      true,
+	"centos8-64":       true,
+	"other6xlinux-64":  true,
+	"debian13-64":      true,
+	"centos9-64":       true,
+	"windows11-64":     true,
+	"windows9-64":      true,
+	"fedora-64":        true,
+	"rhel10-64":        true,
+	"rhel9-64":         true,
+	"opensuse-64":      true,
+	"ubuntu-64":        true,
+	"vmware-photon-64": true,
 }
 
 type VMX struct {
 	name    string
 	hostOS  string
-	ramSize string
-	guestOS string
+	macros  map[string]string
 	lines   []string
-	params  map[string]string
 	debug   bool
 	verbose bool
 }
 
-func GenerateVMX(os, name string, options *CreateOptions, isoOptions *IsoOptions) (*VMX, error) {
-
+func newVMX(os, name string) VMX {
 	vmx := VMX{
 		name:    name,
 		hostOS:  os,
 		debug:   ViperGetBool("debug"),
 		verbose: ViperGetBool("verbose"),
 	}
+	return vmx
+}
 
-	err := vmx.Generate(options, isoOptions)
+func GenerateVMX(os, name string, options *CreateOptions, isoOptions *IsoOptions) (*VMX, error) {
+
+	vmx := newVMX(os, name)
+	actions, err := vmx.Generate(options, isoOptions)
+	if err != nil {
+		return nil, err
+	}
+	if vmx.verbose {
+		for _, action := range actions {
+			log.Printf("[%s] %s\n", vmx.name, action)
+		}
+	}
+	return &vmx, nil
+}
+
+func InitVMX(os, name string, data []byte) (*VMX, error) {
+	vmx := newVMX(os, name)
+	err := vmx.Write(data)
 	if err != nil {
 		return nil, err
 	}
 	return &vmx, nil
 }
 
-func getGuestOS(key string) (string, error) {
-	for osKey, osValue := range VMGuestOSValues {
-		if key == osKey {
-			return osValue, nil
-		}
+func guestOsParams(key string) (string, string, error) {
+	flag := "-g"
+	guest := strings.TrimSpace(key)
+	_, ok := VMGuestOSValues[guest]
+	if !ok {
+		flag = "-c"
+		log.Printf("custom guest os: '%s'\n", guest)
 	}
-	return "", fmt.Errorf("unexpected GuestOS: %s", key)
+	if len(guest) == 0 {
+		return "", "", fmt.Errorf("null guest os value: %s", key)
+	}
+	return flag, guest, nil
 }
 
-func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) error {
+func (v *VMX) InitializeFromTemplate(options *CreateOptions, isoOptions *IsoOptions) error {
 
+	v.macros = make(map[string]string)
+	v.macros["displayName"] = v.name
+	v.macros["numvcpus"] = fmt.Sprintf("%d", options.CpuCount)
 	size, err := SizeParse(options.MemorySize)
 	if err != nil {
 		return err
 	}
-	v.ramSize = fmt.Sprintf("%d", size/MB)
-
-	guestOS, err := getGuestOS(options.GuestOS)
+	v.macros["memsize"] = fmt.Sprintf("%d", size/MB)
+	_, osName, err := guestOsParams(options.GuestOS)
 	if err != nil {
 		return err
 	}
-	v.guestOS = guestOS
-
-	pmap, err := v.mapOptions(options)
-	if err != nil {
-		return err
-	}
-	v.params = pmap
+	v.macros["guestOS"] = osName
+	v.macros["VMDKfile"] = v.name + ".vmdk"
 
 	content := os.Expand(vmxTemplate, v.GetConfig)
 
@@ -119,61 +138,79 @@ func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) error {
 	if err != nil {
 		return err
 	}
-
-	_, err = v.SetEFI(options.EFIBoot)
-	if err != nil {
-		return err
-	}
-
-	if isoOptions != nil {
-		_, err = v.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoOptions.IsoFile)
-		if err != nil {
-			return err
-		}
-	}
-	_, err = v.SetEthernet(options.MacAddress)
-	if err != nil {
-		return err
-	}
-	// FIXME: CreateOptions needs flags for client-mode, other-end-is-an-app
-	_, err = v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
-	if err != nil {
-		return err
-	}
-	_, err = v.SetVNC(options.VNCEnabled, options.VNCPort)
-	if err != nil {
-		return err
-	}
-
-	_, err = v.SetClipboard(options.ClipboardEnabled)
-	if err != nil {
-		return err
-	}
-
-	_, err = v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func (v *VMX) mapOptions(options *CreateOptions) (map[string]string, error) {
-	pmap := make(map[string]string)
-	data, err := json.Marshal(&options)
+func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) ([]string, error) {
+
+	actions := []string{}
+
+	// TODO: use vmcli to generate initial VMX file instead of template
+	err := v.InitializeFromTemplate(options, isoOptions)
 	if err != nil {
-		return pmap, err
-	}
-	var omap map[string]any
-	err = json.Unmarshal(data, &omap)
-	if err != nil {
-		return pmap, err
+		return actions, err
 	}
 
-	for key, value := range omap {
-		pmap[key] = fmt.Sprintf("%v", value)
+	action, err := v.SetEFI(options.EFIBoot)
+	if err != nil {
+		return actions, err
 	}
-	return pmap, nil
+	actions = append(actions, action)
+
+	action, err = v.SetFloppy(false)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	if isoOptions != nil {
+		action, err = v.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoOptions.IsoFile)
+		if err != nil {
+			return actions, err
+		}
+	}
+	action, err = v.SetEthernet(options.MacAddress)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	action, err = v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+	action, err = v.SetVNC(options.VNCEnabled, options.VNCPort)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	action, err = v.SetClipboard(options.ClipboardEnabled)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	action, err = v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	action, err = v.SetTimeSync(options.HostTimeSync)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	action, err = v.SetGuestTimeZone(options.GuestTimeZone)
+	if err != nil {
+		return actions, err
+	}
+	actions = append(actions, action)
+
+	return actions, nil
 }
 
 func (v *VMX) Write(data []byte) error {
@@ -195,23 +232,14 @@ func (v *VMX) GetConfig(key string) string {
 
 	var value string
 	switch key {
-	case "Name":
-		value = v.name
-	case "GuestOS":
-		value = v.guestOS
-	case "MemorySize":
-		value = v.ramSize
+	case "displayName", "guestOS", "numvcpus", "memsize":
+		value = v.macros[key]
 	case "VMDKFile":
 		value = v.name + ".vmdk"
 	}
-	if v.params[key] == "true" {
-		value = "TRUE"
-	}
-	if v.params[key] == "false" {
-		value = "FALSE"
-	}
 	if value == "" {
-		value = v.params[key]
+		log.Printf("WARNING: no expansion value found for '%s'\n", key)
+		value = "MISSING_VMX_EXPANSION_VALUE"
 	}
 	if v.debug {
 		log.Printf("set VMX %s = %s\n", key, value)
@@ -231,6 +259,30 @@ func (v *VMX) removePrefix(prefix string) {
 
 func (v *VMX) addLine(line string) {
 	v.lines = append(v.lines, line)
+}
+
+func (v *VMX) SetFloppy(enabled bool) (string, error) {
+	if v.debug {
+		log.Printf("SetFloppy(%v)\n", enabled)
+	}
+	v.removePrefix("floppy0")
+	if enabled {
+		return "", fmt.Errorf("unsupported: floppy enable: '%v'", enabled)
+	}
+	v.lines = append(v.lines, `floppy0.present = "FALSE"`)
+	return "disabled floppy device", nil
+}
+
+func (v *VMX) SetGuestTimeZone(zone string) (string, error) {
+	if v.debug {
+		log.Printf("SetGuestTimeZone('%s')\n", zone)
+	}
+	v.removePrefix("guestTimeZone")
+	if zone == "" {
+		return "removed guest time zone", nil
+	}
+	v.lines = append(v.lines, fmt.Sprintf(`guestTimeZone = "%s"`, zone))
+	return fmt.Sprintf("set guest time zone: '%s'", zone), nil
 }
 
 func (v *VMX) SetEFI(efi bool) (string, error) {
@@ -448,4 +500,24 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 	v.addLine(`sharedFolder0.expiration = "never"`)
 	v.addLine(`sharedFolder0.maxNum = "1"`)
 	return fmt.Sprintf("enabled filesystem share: host=%s guest=%s", hostPath, guestPath), nil
+}
+
+func (v *VMX) SetTimeSync(enable bool) (string, error) {
+	if v.debug {
+		log.Printf("SetTimeSync(%v)\n", enable)
+	}
+
+	v.removePrefix("tools.syncTime")
+	v.removePrefix("time.synchronize")
+	if !enable {
+		v.addLine(`tools.syncTime = "FALSE"`)
+		return "disabled host time sync", nil
+	}
+	v.addLine(`tools.syncTime = "TRUE"`)
+	v.addLine(`time.synchronize.continue = "TRUE"`)
+	v.addLine(`time.synchronize.restore = "TRUE"`)
+	v.addLine(`time.synchronize.resume.disk = "TRUE"`)
+	v.addLine(`time.synchronize.shrink = "TRUE"`)
+	v.addLine(`time.synchronize.tools.startup = "TRUE"`)
+	return "enabled host time sync", nil
 }

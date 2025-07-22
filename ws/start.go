@@ -20,7 +20,15 @@ type StopOptions struct {
 
 func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
 	if v.debug {
-		log.Printf("Start(%s, %+v)\n", vid, options)
+		odump, err := FormatJSON(options)
+		if err != nil {
+			log.Fatal(err)
+		}
+		idump, err := FormatJSON(isoOptions)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Start(%s, options, isoOptions)\noptions: %s\nisoOptions: %s\n", vid, odump, idump)
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
@@ -97,8 +105,8 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		}
 
 		if isoOptions.ModifyISO {
-			log.Printf("[%s] saved ISO BootConnected state: %v\n", vm.Name, savedBootConnected)
 			if savedBootConnected != isoOptions.IsoBootConnected {
+				log.Printf("[%s] restoring saved ISO BootConnected state: %v\n", vm.Name, savedBootConnected)
 				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
 				if err != nil {
 					return "", err

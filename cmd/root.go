@@ -138,12 +138,13 @@ func InitIsoOptions() (*ws.IsoOptions, error) {
 
 	options := ws.IsoOptions{}
 	iso := ViperGetString("iso")
+	enable := iso != ""
 	disable := ViperGetBool("iso_disable")
-	if (iso != "") && disable {
+	if enable && disable {
 		return nil, fmt.Errorf("conflict: iso/iso-disable")
 	}
 	switch {
-	case iso != "":
+	case enable:
 		options.ModifyISO = true
 		options.IsoPresent = true
 		options.IsoFile = iso
@@ -155,9 +156,11 @@ func InitIsoOptions() (*ws.IsoOptions, error) {
 		options.ModifyISO = true
 		options.IsoPresent = false
 	}
+
 	if ViperGetBool("iso_detach") {
 		options.ModifyISO = true
 		options.IsoBootConnected = false
 	}
+
 	return &options, nil
 }

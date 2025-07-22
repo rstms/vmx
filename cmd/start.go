@@ -33,7 +33,6 @@ package cmd
 import (
 	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var startCmd = &cobra.Command{
@@ -56,13 +55,14 @@ to quickly create a Cobra application.`,
 			Wait:       ViperGetBool("wait"),
 		}
 
+		if ViperGetBool("stretch") {
+			options.ModifyStretch = true
+			options.StretchEnabled = true
+		}
+
 		if ViperGetBool("no_stretch") {
 			options.ModifyStretch = true
 			options.StretchEnabled = false
-		} else {
-			viper.Set("stretch", true)
-			options.ModifyStretch = true
-			options.StretchEnabled = true
 		}
 
 		isoOptions, err := InitIsoOptions()

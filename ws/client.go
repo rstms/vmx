@@ -29,8 +29,8 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 	api := APIClient{
 		URL:     url,
 		Headers: make(map[string]string),
-		verbose: ViperGetBool("verbose"),
-		debug:   ViperGetBool("debug"),
+		verbose: ViperGetBool("api_client.verbose"),
+		debug:   ViperGetBool("api_client.debug"),
 	}
 
 	if headers != nil {

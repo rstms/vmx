@@ -46,9 +46,25 @@ func TestPathNormalize(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, expected, normalized)
 
-	formatted, err := PathnameFormat("windows", normalized)
+	path = "c:\\dir\\\\foo\\\\bar"
+	expected = "/c/dir/foo/bar"
+	normalized, err = PathNormalize(path)
 	require.Nil(t, err)
-	require.Equal(t, path, formatted)
+	require.Equal(t, expected, normalized)
+}
+
+func TestPathnameFormat(t *testing.T) {
+	normalized := "/C/dir/subdir/file.ext"
+	windowsFormatted := "C:\\dir\\subdir\\file.ext"
+	unixFormatted := "/C/dir/subdir/file.ext"
+
+	path, err := PathnameFormat("windows", normalized)
+	require.Nil(t, err)
+	require.Equal(t, windowsFormatted, path)
+
+	path, err = PathnameFormat("unix", normalized)
+	require.Nil(t, err)
+	require.Equal(t, unixFormatted, path)
 }
 
 func TestPathNoSubdirectory(t *testing.T) {
@@ -201,4 +217,19 @@ func TestFormatIsoPathname(t *testing.T) {
 		require.Equal(t, expected, result, display)
 		log.Println(display)
 	}
+}
+
+func TestPathFormat(t *testing.T) {
+
+	path, err := PathFormat("unix", "/sub/dir")
+	require.Nil(t, err)
+	require.Equal(t, "/sub/dir", path)
+
+	path, err = PathFormat("unix", "/sub/dir/")
+	require.Nil(t, err)
+	require.Equal(t, "/sub/dir", path)
+
+	path, err = PathFormat("windows", "///C//foo/bar.ext/baz/")
+	require.Nil(t, err)
+	require.Equal(t, "C:\\foo\\bar.ext\\baz", path)
 }

@@ -549,11 +549,11 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 		if err != nil {
 			return err
 		}
-		err = v.getIpAddress(vm)
+		err = v.cli.GetMacAddress(vm, nil)
 		if err != nil {
 			return err
 		}
-		err = v.cli.GetMacAddress(vm, nil)
+		err = v.getIpAddress(vm)
 		if err != nil {
 			return err
 		}
@@ -718,6 +718,13 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 		addr := olines[0]
 		if strings.HasPrefix(addr, "Error:") {
 			addr = ""
+		}
+		vm.IpAddress = addr
+	}
+	if vm.IpAddress == "" && vm.MacAddress != "" {
+		addr, err := v.ArpQuery(vm)
+		if err != nil {
+			return err
 		}
 		vm.IpAddress = addr
 	}

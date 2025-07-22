@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const debug = false
+
 var DRIVE_LETTER = regexp.MustCompile(`^([a-zA-Z]:)(.*)`)
 var DRIVE_LETTER_NORMALIZED = regexp.MustCompile(`^(/[a-zA-Z]/)(.*)`)
 
@@ -28,7 +30,9 @@ func PathCompare(first, second string) (bool, error) {
 }
 
 func PathNormalize(path string) (string, error) {
-	//log.Printf("PathNormalize(%s)\n", path)
+	if debug {
+		log.Printf("PathNormalize(%s)\n", path)
+	}
 	match := DRIVE_LETTER.FindStringSubmatch(path)
 	//log.Printf("match: %d %v\n", len(match), match)
 	if len(match) == 3 {
@@ -40,12 +44,36 @@ func PathNormalize(path string) (string, error) {
 	if strings.Contains(path, "\\") {
 		path = strings.ReplaceAll(path, "\\", "/")
 	}
-	//log.Printf("PathNormalize returning: %s\n", path)
+
+	for strings.Contains(path, "//") {
+		path = strings.ReplaceAll(path, "//", "/")
+	}
+
+	if debug {
+		log.Printf("PathNormalize returning: %s\n", path)
+	}
+	return path, nil
+}
+
+func PathFormat(os, path string) (string, error) {
+	if debug {
+		log.Printf("PathFormat(%s, %s)\n", os, path)
+	}
+	path, err := PathnameFormat(os, path)
+	if err != nil {
+		return "", err
+	}
+	path = strings.TrimRight(path, "/\\")
+	if debug {
+		log.Printf("PathFormat returning: %s\n", path)
+	}
 	return path, nil
 }
 
 func PathnameFormat(os, path string) (string, error) {
-	log.Printf("PathnameFormat(%s, %s)\n", os, path)
+	if debug {
+		log.Printf("PathnameFormat(%s, %s)\n", os, path)
+	}
 	path, err := PathNormalize(path)
 	if err != nil {
 		return "", err
@@ -53,7 +81,7 @@ func PathnameFormat(os, path string) (string, error) {
 	switch os {
 	case "windows":
 		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(path)
-		log.Printf("match: %d %v\n", len(match), match)
+		//log.Printf("match: %d %v\n", len(match), match)
 		if len(match) == 3 {
 			path = string(match[1][1]) + ":\\" + match[2]
 		}
@@ -68,23 +96,32 @@ func PathnameFormat(os, path string) (string, error) {
 	case "default":
 		path = filepath.ToSlash(path)
 	}
-	log.Printf("PathnameFormat returning: %s\n", path)
+	if debug {
+		log.Printf("PathnameFormat returning: %s\n", path)
+	}
 	return path, nil
 }
 
 func PathToName(path string) (string, error) {
-	//log.Printf("PathToName(%s)\n", path)
+	if debug {
+		log.Printf("PathToName(%s)\n", path)
+	}
 	path, err := PathNormalize(path)
 	if err != nil {
 		return "", err
 	}
 	_, filename := filepath.Split(path)
 	name, _, _ := strings.Cut(filename, ".")
-	//log.Printf("PathToName returning: %s\n", name)
+	if debug {
+		log.Printf("PathToName returning: %s\n", name)
+	}
 	return name, nil
 }
 
 func ParseFileList(os string, lines []string) ([]VMFile, error) {
+	if debug {
+		log.Printf("ParseFileList(%s, %v)\n", os, lines)
+	}
 	files := []VMFile{}
 	for _, line := range lines {
 		var match []string
@@ -103,10 +140,16 @@ func ParseFileList(os string, lines []string) ([]VMFile, error) {
 		}
 
 	}
+	if debug {
+		log.Printf("ParseFileList returning: %+v\n", files)
+	}
 	return files, nil
 }
 
 func PathChdirCommand(os string, path string) (string, error) {
+	if debug {
+		log.Printf("PathChdirCommand(%s, %s)\n", os, path)
+	}
 	var command string
 	path, err := PathNormalize(path)
 	if err != nil {
@@ -123,24 +166,33 @@ func PathChdirCommand(os string, path string) (string, error) {
 	} else {
 		command = "cd " + path + " ; "
 	}
-	//fmt.Printf("PathChdirCommand: %s\n", command)
+	if debug {
+		log.Printf("PathChdirCommand returning: %s\n", command)
+	}
 	return command, nil
 }
 
 func IsIsoPath(path string) bool {
 	sep := string(filepath.Separator)
+	ret := false
 	switch {
 	case path == "iso":
-		return true
+		ret = true
 	case strings.HasPrefix(path, "iso"+sep):
-		return true
+		ret = true
 	case strings.HasSuffix(path, sep+"iso"):
-		return true
+		ret = true
 	}
-	return false
+	if debug {
+		log.Printf("IsIsoPath(%s) returning: %v\n", path, ret)
+	}
+	return ret
 }
 
 func FormatIsoPath(isoPath, path string) string {
+	if debug {
+		log.Printf("FormatIsoPath(%s, %s)\n", isoPath, path)
+	}
 	sep := string(filepath.Separator)
 	// reject `^/.*`
 	if strings.HasPrefix(path, sep) {
@@ -156,10 +208,17 @@ func FormatIsoPath(isoPath, path string) string {
 		path = path[4:]
 	}
 	// prepend isoPath
-	return filepath.Join(isoPath, path)
+	formatted := filepath.Join(isoPath, path)
+	if debug {
+		log.Printf("FormatIsoPath returning: %s\n", formatted)
+	}
+	return formatted
 }
 
 func FormatIsoPathname(isoPath, path string) string {
+	if debug {
+		log.Printf("FormatIsoPathname(%s, %s)\n", isoPath, path)
+	}
 	dir, file := filepath.Split(path)
 	if file == "" {
 		return ""
@@ -173,5 +232,9 @@ func FormatIsoPathname(isoPath, path string) string {
 	if !strings.HasSuffix(file, ".iso") {
 		file += ".iso"
 	}
-	return filepath.Join(dir, file)
+	formatted := filepath.Join(dir, file)
+	if debug {
+		log.Printf("FormatIsoPathname returning: %s\n", formatted)
+	}
+	return formatted
 }

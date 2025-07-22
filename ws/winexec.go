@@ -47,16 +47,16 @@ func NewWinExecClient() (*WinExecClient, error) {
 
 func (w *WinExecClient) Spawn(command string, exitCode *int) error {
 	if w.debug {
-		fmt.Printf("winexec Spawn(%s)\n", command)
+		log.Printf("winexec Spawn(%s)\n", command)
 	}
 	request := WinExecRequest{Command: command}
 	var response WinExecResponse
-	log.Printf("winexec spawn request: %+v\n", request)
+	//log.Printf("winexec spawn request: %+v\n", request)
 	_, err := w.api.Post("/spawn/", &request, &response, nil)
 	if err != nil {
 		return err
 	}
-	log.Printf("winexec spawn response: %+v\n", response)
+	//log.Printf("winexec spawn response: %+v\n", response)
 	if !response.Success {
 		return fmt.Errorf("WinExec: spawn failed: %v", response)
 	}
@@ -70,16 +70,16 @@ func (w *WinExecClient) Spawn(command string, exitCode *int) error {
 
 func (w *WinExecClient) Exec(command string, args []string, exitCode *int) (string, string, error) {
 	if w.debug {
-		fmt.Printf("winexec Exec(%s %v)\n", command, args)
+		log.Printf("winexec Exec(%s %v)\n", command, args)
 	}
 	request := WinExecRequest{Command: command, Args: args}
 	var response WinExecResponse
-	log.Printf("winexec exec request: %+v\n", request)
+	//log.Printf("winexec exec request: %+v\n", request)
 	_, err := w.api.Post("/exec/", &request, &response, nil)
 	if err != nil {
 		return "", "", err
 	}
-	log.Printf("winexec exec response: %+v\n", response)
+	//log.Printf("winexec exec response: %+v\n", response)
 	if !response.Success {
 		return "", "", fmt.Errorf("WinExec: exec failed: %v", response)
 	}
