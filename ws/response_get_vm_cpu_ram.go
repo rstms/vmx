@@ -1,4 +1,4 @@
-package workstation
+package ws
 
 type VmRestGetVmCpuRamResponse struct {
 	Cpu struct {

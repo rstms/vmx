@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +48,7 @@ unless specified with option flags.
 		InitController()
 		name := args[0]
 
-		options := workstation.NewCreateOptions()
+		options := ws.NewCreateOptions()
 
 		options.Wait = ViperGetBool("wait")
 		options.CpuCount = ViperGetInt("cpu")

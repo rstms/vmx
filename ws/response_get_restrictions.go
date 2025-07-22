@@ -1,4 +1,4 @@
-package workstation
+package ws
 
 type VmRestGetVmRestrictionsResponse struct {
 	ApplianceView struct {

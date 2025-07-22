@@ -33,7 +33,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 )
 
@@ -56,10 +56,10 @@ long listing.
 		if len(args) > 0 {
 			vid = args[0]
 		}
-		options := workstation.FilesOptions{
+		options := ws.FilesOptions{
 			Detail: ViperGetBool("long"),
 			All:    ViperGetBool("all"),
-			Iso:    workstation.IsIsoPath(vid),
+			Iso:    ws.IsIsoPath(vid),
 		}
 		lines, err := vmx.Files(vid, options)
 		cobra.CheckErr(err)

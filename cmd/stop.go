@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +48,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		options := workstation.StopOptions{
+		options := ws.StopOptions{
 			Wait:     ViperGetBool("wait"),
 			PowerOff: ViperGetBool("poweroff"),
 		}

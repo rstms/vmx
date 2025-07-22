@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +57,7 @@ Changes can be specified for multiple categories in a single command.
 		vm, err := vmx.Get(args[0])
 		cobra.CheckErr(err)
 
-		options := workstation.CreateOptions{}
+		options := ws.CreateOptions{}
 
 		// initX functions depend on zero-values in CreateOptions
 
@@ -98,7 +98,7 @@ Changes can be specified for multiple categories in a single command.
 	},
 }
 
-func initETHOptions(options *workstation.CreateOptions) error {
+func initETHOptions(options *ws.CreateOptions) error {
 	enable := ViperGetBool("eth_enable")
 	disable := ViperGetBool("eth_disable")
 	if enable && disable {
@@ -124,7 +124,7 @@ func initETHOptions(options *workstation.CreateOptions) error {
 	return nil
 }
 
-func initTTYOptions(options *workstation.CreateOptions) error {
+func initTTYOptions(options *ws.CreateOptions) error {
 
 	ttyPipe := ViperGetString("tty_pipe")
 	disable := ViperGetBool("tty_disable")
@@ -152,7 +152,7 @@ func initTTYOptions(options *workstation.CreateOptions) error {
 	return nil
 }
 
-func initVNCOptions(options *workstation.CreateOptions) error {
+func initVNCOptions(options *ws.CreateOptions) error {
 	enable := ViperGetBool("vnc_enable")
 	disable := ViperGetBool("vnc_disable")
 	if enable && disable {
@@ -169,7 +169,7 @@ func initVNCOptions(options *workstation.CreateOptions) error {
 	return nil
 }
 
-func initEFIOptions(options *workstation.CreateOptions) error {
+func initEFIOptions(options *ws.CreateOptions) error {
 	bootEFI := ViperGetBool("boot_efi")
 	bootBIOS := ViperGetBool("boot_bios")
 	if bootEFI && bootBIOS {
@@ -185,7 +185,7 @@ func initEFIOptions(options *workstation.CreateOptions) error {
 	return nil
 }
 
-func initShareOptions(options *workstation.CreateOptions) error {
+func initShareOptions(options *ws.CreateOptions) error {
 	enable := ViperGetString("share_enable")
 	disable := ViperGetBool("share_disable")
 	switch {
@@ -207,7 +207,7 @@ func initShareOptions(options *workstation.CreateOptions) error {
 	return nil
 }
 
-func initClipboardOptions(options *workstation.CreateOptions) error {
+func initClipboardOptions(options *ws.CreateOptions) error {
 	enable := ViperGetBool("clibboard_enable")
 	disable := ViperGetBool("clipboard_disable")
 	switch {

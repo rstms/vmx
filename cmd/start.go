@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -50,7 +50,7 @@ to quickly create a Cobra application.`,
 		InitController()
 		vid := args[0]
 
-		options := workstation.StartOptions{
+		options := ws.StartOptions{
 			Background: ViperGetBool("background"),
 			FullScreen: ViperGetBool("fullscreen"),
 			Wait:       ViperGetBool("wait"),

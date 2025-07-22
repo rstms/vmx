@@ -1,4 +1,4 @@
-package workstation
+package ws
 
 type VmRestGetVmsResponse []struct {
 	ID   string `json:"id,omitzero"`

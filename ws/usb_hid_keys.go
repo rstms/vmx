@@ -1,4 +1,4 @@
-package workstation
+package ws
 
 /**
  * USB HID Keyboard scan codes as per USB spec 1.11

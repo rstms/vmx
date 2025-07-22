@@ -35,7 +35,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -51,7 +51,7 @@ const (
 	OutputFormatJSON
 )
 
-var vmx workstation.Controller
+var vmx ws.Controller
 
 var rootCmd = &cobra.Command{
 	Version: "0.0.24",
@@ -119,7 +119,7 @@ func InitController() {
 	viper.Set("vmx.interval", ViperGetInt("interval"))
 	viper.Set("vmx.verbose", ViperGetBool("verbose"))
 	viper.Set("vmx.debug", ViperGetBool("debug"))
-	c, err := workstation.NewController()
+	c, err := ws.NewController()
 	cobra.CheckErr(err)
 	if ViperGetBool("verbose") {
 		log.Printf("Controller: %s\n", FormatJSON(c))
@@ -134,9 +134,9 @@ func OutputInstanceState(vid, result string) {
 	fmt.Println(FormatJSON(&state))
 }
 
-func InitIsoOptions() (*workstation.IsoOptions, error) {
+func InitIsoOptions() (*ws.IsoOptions, error) {
 
-	options := workstation.IsoOptions{}
+	options := ws.IsoOptions{}
 	iso := ViperGetString("iso")
 	disable := ViperGetBool("iso_disable")
 	if (iso != "") && disable {

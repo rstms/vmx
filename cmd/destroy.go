@@ -36,7 +36,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rstms/vmx/workstation"
+	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +56,7 @@ to quickly create a Cobra application.`,
 		vm, err := vmx.Get(vid)
 		cobra.CheckErr(err)
 		if confirm(fmt.Sprintf("Confirm IRRECOVERABLE DESTRUCTION of VM instance '%s'", vm.Name)) {
-			options := workstation.DestroyOptions{
+			options := ws.DestroyOptions{
 				Force: ViperGetBool("kill"),
 			}
 			err := vmx.Destroy(vm.Id, options)
@@ -64,7 +64,7 @@ to quickly create a Cobra application.`,
 
 			if OutputJSON {
 				// we can't call OutputInstanceState, so build the status here
-				status := workstation.VMState{Name: vm.Name, Id: vm.Id, Result: "vm_destroyed"}
+				status := ws.VMState{Name: vm.Name, Id: vm.Id, Result: "vm_destroyed"}
 				fmt.Println(FormatJSON(&status))
 			}
 		}
