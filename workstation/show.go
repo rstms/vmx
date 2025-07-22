@@ -1,8 +1,8 @@
 package workstation
 
 import (
-    "fmt"
-    "log"
+	"log"
+	"strings"
 )
 
 type ShowOptions struct {
@@ -48,11 +48,10 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		}
 	}
 
-
 	vms := make([]VM, len(selected))
 	for i, vid := range selected {
 		if options.Detail {
-			vm, err := v.api.GetVM(vid.Name)
+			vm, err := v.cli.GetVM(vid.Name)
 			if err != nil {
 				return []VM{}, err
 			}
@@ -67,4 +66,3 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 	}
 	return vms, nil
 }
-
