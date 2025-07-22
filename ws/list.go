@@ -31,7 +31,15 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 		paths = []string{FormatIsoPath(v.IsoPath, vid)}
 		pattern = ISO_PATTERN
 	} else if vid == "" {
-		paths = v.Roots
+		vmids, err := v.cli.GetVIDs()
+		if err != nil {
+			return lines, err
+		}
+		for _, vmid := range vmids {
+			path, _ := filepath.Split(vmid.Path)
+			log.Printf("Files path: %s\n", path)
+			paths = append(paths, path)
+		}
 	} else {
 		vm, err := v.cli.GetVM(vid)
 		if err != nil {
@@ -58,6 +66,10 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 }
 
 func (v *vmctl) listFiles(path string, detail bool, pattern *regexp.Regexp) ([]string, error) {
+
+	if v.debug {
+		log.Printf("listFiles(%s, %v, %+v)\n", path, detail, *pattern)
+	}
 
 	lines := []string{}
 
@@ -93,9 +105,16 @@ func (v *vmctl) listFiles(path string, detail bool, pattern *regexp.Regexp) ([]s
 	for _, line := range olines {
 		line = strings.TrimSpace(line)
 		log.Printf("listFiles.line: %s\n", line)
-		if detail || pattern.MatchString(line) {
+		if detail {
 			lines = append(lines, line)
+		} else if pattern.MatchString(line) {
+			nline, err := PathNormalize(filepath.Join(strings.TrimRight(path, "/\\"), line))
+			if err != nil {
+				return lines, err
+			}
+			lines = append(lines, nline)
 		}
 	}
+
 	return lines, nil
 }

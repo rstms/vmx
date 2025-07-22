@@ -38,10 +38,12 @@ release:
 	@$(if $(update),gh release delete -y v$(version),)
 	gh release create v$(version) --notes "v$(version)"
 
-clean:
+logclean: 
+	echo >/var/log/vmx
+
+clean: logclean
 	rm -f $(program) *.core *.vmx.*
 	go clean
-	echo >/var/log/vmx
 
 sterile: clean
 	which $(program) && go clean -i || true
