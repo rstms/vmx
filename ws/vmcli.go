@@ -24,7 +24,7 @@ func NewCliClient(v *vmctl) *vmcli {
 }
 
 func (c *vmcli) exec(vm *VM, command string, result any) error {
-	path, err := PathFormat(c.v.Remote, vm.Path)
+	path, err := PathnameFormat(c.v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (c *vmcli) GetVIDs() ([]VID, error) {
 }
 
 func (c *vmcli) getPathVIDs(path string) error {
-	hostPath, err := PathFormat(c.v.Remote, path)
+	hostPath, err := PathnameFormat(c.v.Remote, path)
 	if err != nil {
 		return nil
 	}
@@ -363,7 +363,7 @@ func (c *vmcli) GetPath(config *VMConfig, key string, required bool) (string, er
 	if err != nil {
 		return "", err
 	}
-	path, err := PathFormat(c.v.Remote, value)
+	path, err := PathnameFormat(c.v.Remote, value)
 	if err != nil {
 		return "", err
 	}
@@ -472,7 +472,7 @@ func (c *vmcli) SetIsoStartConnected(vm *VM, connected bool) error {
 func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 	label := "ide1:0"
 
-	path, err := PathFormat(c.v.Remote, options.IsoFile)
+	path, err := PathnameFormat(c.v.Remote, options.IsoFile)
 	if err != nil {
 		return err
 	}

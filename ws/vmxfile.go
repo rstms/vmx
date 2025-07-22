@@ -262,7 +262,7 @@ func (v *VMX) SetISO(present, bootConnected bool, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	hostPath, err := PathFormat(v.hostOS, path)
+	hostPath, err := PathnameFormat(v.hostOS, path)
 	if err != nil {
 		return "", err
 	}
@@ -424,7 +424,7 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 		return "disabled filesystem share", nil
 	}
 
-	formatted, err := PathFormat(v.hostOS, hostPath)
+	formatted, err := PathnameFormat(v.hostOS, hostPath)
 	if err != nil {
 		return "", err
 	}

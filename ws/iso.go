@@ -36,7 +36,7 @@ func (v *vmctl) downloadISO(url, cert, key, ca string) (string, error) {
 
 	_, basename := path.Split(url)
 	pathname := FormatIsoPathname(v.IsoPath, basename)
-	hostPathname, err := PathFormat(v.Remote, pathname)
+	hostPathname, err := PathnameFormat(v.Remote, pathname)
 	if err != nil {
 		return "", err
 	}

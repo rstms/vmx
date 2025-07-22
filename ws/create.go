@@ -88,7 +88,7 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 
 	// create instance directory
 	dir, _ := filepath.Split(vm.Path)
-	hostPath, err := PathFormat(v.Remote, dir)
+	hostPath, err := PathnameFormat(v.Remote, dir)
 	if err != nil {
 		return vm, err
 	}
@@ -101,7 +101,7 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	if isoOptions.IsoFile != "" {
-		path, err := PathFormat(v.Remote, FormatIsoPathname(v.IsoPath, isoOptions.IsoFile))
+		path, err := PathnameFormat(v.Remote, FormatIsoPathname(v.IsoPath, isoOptions.IsoFile))
 		if err != nil {
 			return vm, err
 		}
@@ -197,7 +197,7 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 
 	}
 	dir, _ := filepath.Split(vm.Path)
-	hostPath, err := PathFormat(v.Remote, dir)
+	hostPath, err := PathnameFormat(v.Remote, dir)
 	if err != nil {
 		return err
 	}

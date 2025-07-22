@@ -101,14 +101,14 @@ func (v *vmctl) DownloadFile(vm *VM, localPath, filename string) error {
 		return err
 	}
 	if local {
-		hostPath, err := PathFormat(v.Local, hostPath)
+		hostPath, err := PathnameFormat(v.Local, hostPath)
 		if err != nil {
 			return err
 		}
 		return v.copyFile(localPath, hostPath)
 	}
 
-	path, err := PathFormat("scp", hostPath)
+	path, err := PathnameFormat("scp", hostPath)
 	if err != nil {
 		return err
 	}
@@ -143,14 +143,14 @@ func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
 		return err
 	}
 	if local {
-		hostPath, err := PathFormat(v.Local, hostPath)
+		hostPath, err := PathnameFormat(v.Local, hostPath)
 		if err != nil {
 			return err
 		}
 		return v.copyFile(hostPath, localPath)
 	}
 
-	path, err := PathFormat("scp", hostPath)
+	path, err := PathnameFormat("scp", hostPath)
 	if err != nil {
 		return err
 	}

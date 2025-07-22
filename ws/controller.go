@@ -702,7 +702,7 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 	if v.debug {
 		log.Printf("getIpAddress(%s)\n", vm.Name)
 	}
-	path, err := PathFormat(v.Remote, vm.Path)
+	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}

@@ -72,7 +72,7 @@ func (v *vmctl) sendBuf(vm *VM, buf string) error {
 	if v.debug {
 		fmt.Printf("sendBuf(%s, '%s')\n", vm.Name, buf)
 	}
-	path, err := PathFormat(v.Remote, vm.Path)
+	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (v *vmctl) sendCode(vm *VM, code, mod uint32) error {
 	if v.debug {
 		fmt.Printf("sendCode(%s, %04x, %04x)\n", vm.Name, code, mod)
 	}
-	path, err := PathFormat(v.Remote, vm.Path)
+	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}

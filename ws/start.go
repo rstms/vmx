@@ -46,7 +46,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		}
 	}
 
-	path, err := PathFormat(v.Remote, vm.Path)
+	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +127,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	if ok {
 		return "already stopped", nil
 	}
-	path, err := PathFormat(v.Remote, vm.Path)
+	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
 		return "", err
 	}

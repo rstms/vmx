@@ -44,8 +44,8 @@ func PathNormalize(path string) (string, error) {
 	return path, nil
 }
 
-func PathFormat(os, path string) (string, error) {
-	log.Printf("PathFormat(%s, %s)\n", os, path)
+func PathnameFormat(os, path string) (string, error) {
+	log.Printf("PathnameFormat(%s, %s)\n", os, path)
 	path, err := PathNormalize(path)
 	if err != nil {
 		return "", err
@@ -68,7 +68,7 @@ func PathFormat(os, path string) (string, error) {
 	case "default":
 		path = filepath.ToSlash(path)
 	}
-	log.Printf("PathFormat returning: %s\n", path)
+	log.Printf("PathnameFormat returning: %s\n", path)
 	return path, nil
 }
 

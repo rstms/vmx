@@ -46,7 +46,7 @@ func TestPathNormalize(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, expected, normalized)
 
-	formatted, err := PathFormat("windows", normalized)
+	formatted, err := PathnameFormat("windows", normalized)
 	require.Nil(t, err)
 	require.Equal(t, path, formatted)
 }

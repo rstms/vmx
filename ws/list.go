@@ -73,7 +73,7 @@ func (v *vmctl) listFiles(path string, detail bool, pattern *regexp.Regexp) ([]s
 
 	lines := []string{}
 
-	hostPath, err := PathFormat(v.Remote, path)
+	hostPath, err := PathnameFormat(v.Remote, path)
 	if err != nil {
 		return lines, err
 	}
