@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+type FilesOptions struct {
+	Detail bool
+	All    bool
+	Iso    bool
+}
+
 func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	if v.debug {
 		log.Printf("Files(%s, %+v)\n", vid, options)

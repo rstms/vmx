@@ -13,6 +13,11 @@ type StartOptions struct {
 	StretchEnabled bool
 }
 
+type StopOptions struct {
+	PowerOff bool
+	Wait     bool
+}
+
 func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
 	if v.debug {
 		log.Printf("Start(%s, %+v)\n", vid, options)
@@ -104,4 +109,52 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		return "started", nil
 	}
 	return "start pending", nil
+}
+
+func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
+	if v.debug {
+		log.Printf("Stop(%s, %+v)\n", vid, options)
+	}
+	vm, err := v.cli.GetVM(vid)
+	if err != nil {
+		return "", err
+	}
+
+	ok, err := v.checkPowerState(&vm, "stop", "off")
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return "already stopped", nil
+	}
+	path, err := PathFormat(v.Remote, vm.Path)
+	if err != nil {
+		return "", err
+	}
+	// FIXME: may need -vp PASSWORD here for encrypted instances
+	command := "vmrun -T ws stop " + path
+	action := "shutdown"
+	if options.PowerOff {
+		action = "forced power down"
+	}
+	if v.verbose {
+		fmt.Printf("[%s] requesting %s...\n", vm.Name, action)
+	}
+
+	_, err = v.RemoteExec(command, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if v.verbose {
+		fmt.Printf("[%s] %s request complete\n", vm.Name, action)
+	}
+	if options.Wait {
+		err := v.Wait(vid, "off")
+		if err != nil {
+			return "", err
+		}
+		return "stopped", nil
+	}
+	return "stop pending", nil
 }
