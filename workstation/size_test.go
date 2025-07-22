@@ -35,7 +35,7 @@ func TestSizeParse(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, int64(1024*1024*1024), size)
 
-	G := int64(1024 * 1044 * 1024)
+	G := int64(1024 * 1024 * 1024)
 	size, err = SizeParse("1.25G")
 	require.Nil(t, err)
 	require.Equal(t, G+G/4, size)

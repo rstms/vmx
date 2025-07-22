@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+var VMX_PATTERN = regexp.MustCompile(`^.*\.[vV][mM][xX]$`)
+var ISO_PATTERN = regexp.MustCompile(`^.*\.[iI][sS][oO]$`)
+var ALL_PATTERN = regexp.MustCompile(`.*`)
+
 type FilesOptions struct {
 	Detail bool
 	All    bool
