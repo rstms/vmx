@@ -48,10 +48,11 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		}
 	}
 
+
 	vms := make([]VM, len(selected))
 	for i, vid := range selected {
 		if options.Detail {
-			vm, err := v.cli.GetVM(vid.Name)
+			vm, err := v.api.GetVM(vid.Name)
 			if err != nil {
 				return []VM{}, err
 			}
@@ -60,3 +61,10 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 				return []VM{}, err
 			}
 			vms[i] = vm
+		} else {
+			vms[i] = VM{Name: vid.Name}
+		}
+	}
+	return vms, nil
+}
+
