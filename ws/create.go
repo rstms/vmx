@@ -65,7 +65,7 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	var vm VM
 
 	if v.debug {
-		log.Printf("Create: %s %+v\n", name, options)
+		log.Printf("Create(name='%s', options='%+v' isoOptions='%+v'\n", name, options, isoOptions)
 	}
 
 	// check for existing instance
@@ -84,7 +84,7 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	vm.Name = name
-	vm.Path = filepath.Join(ViperGetString("vmware_path"), name, name+".vmx")
+	vm.Path = filepath.Join(v.Roots[0], name, name+".vmx")
 
 	// create instance directory
 	dir, _ := filepath.Split(vm.Path)
@@ -92,7 +92,10 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	if err != nil {
 		return vm, err
 	}
-	_, err = v.RemoteExec("mkdir "+hostPath, nil)
+	mkdirCommand := "mkdir " + hostPath
+	log.Printf("create mkdir command: %s\n", mkdirCommand)
+	panic("howdy")
+	_, err = v.RemoteExec(mkdirCommand, nil)
 	if err != nil {
 		return vm, err
 	}
