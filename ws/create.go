@@ -3,7 +3,7 @@ package ws
 import (
 	"fmt"
 	"log"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -87,10 +87,14 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	vm.Name = name
-	vm.Path = filepath.Join(v.Roots[0], name, name+".vmx")
+	normalized, err := PathNormalize(path.Join(v.Roots[0], name, name+".vmx"))
+	if err != nil {
+		return vm, err
+	}
+	vm.Path = normalized
 
 	// create instance directory
-	dir, _ := filepath.Split(vm.Path)
+	dir, _ := path.Split(vm.Path)
 	hostPath, err := PathFormat(v.Remote, dir)
 	if err != nil {
 		return vm, err
@@ -164,7 +168,6 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 		if err != nil {
 			return vm, err
 		}
-
 		_, err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
 		if err != nil {
 			return vm, err
@@ -173,7 +176,6 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 		if err != nil {
 			return vm, err
 		}
-
 	}
 
 	return vm, nil
@@ -202,7 +204,7 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 		}
 
 	}
-	dir, _ := filepath.Split(vm.Path)
+	dir, _ := path.Split(vm.Path)
 	hostPath, err := PathnameFormat(v.Remote, dir)
 	if err != nil {
 		return err

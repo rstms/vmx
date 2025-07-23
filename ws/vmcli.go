@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -24,11 +24,11 @@ func NewCliClient(v *vmctl) *vmcli {
 }
 
 func (c *vmcli) exec(vm *VM, command string, result any) error {
-	path, err := PathnameFormat(c.v.Remote, vm.Path)
+	hostPath, err := PathnameFormat(c.v.Remote, vm.Path)
 	if err != nil {
 		return err
 	}
-	olines, err := c.v.RemoteExec(fmt.Sprintf("vmcli %s %s", command, path), nil)
+	olines, err := c.v.RemoteExec(fmt.Sprintf("vmcli %s %s", command, hostPath), nil)
 	if err != nil {
 		return err
 	}
@@ -45,8 +45,8 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 func (c *vmcli) GetVIDs() ([]VID, error) {
 	c.Reset()
 	vids := []VID{}
-	for _, path := range c.v.Roots {
-		err := c.getPathVIDs(path)
+	for _, rootPath := range c.v.Roots {
+		err := c.getPathVIDs(rootPath)
 		if err != nil {
 			return vids, err
 		}
@@ -57,8 +57,8 @@ func (c *vmcli) GetVIDs() ([]VID, error) {
 	return vids, nil
 }
 
-func (c *vmcli) getPathVIDs(path string) error {
-	hostPath, err := PathnameFormat(c.v.Remote, path)
+func (c *vmcli) getPathVIDs(vmPath string) error {
+	hostPath, err := PathnameFormat(c.v.Remote, vmPath)
 	if err != nil {
 		return nil
 	}
@@ -73,7 +73,11 @@ func (c *vmcli) getPathVIDs(path string) error {
 		for _, dir := range dirs {
 			dir = strings.TrimSpace(dir)
 			if dir != "" {
-				files[filepath.Join(path, dir, dir+".vmx")] = true
+				localPath, err := PathNormalize(dir)
+				if err != nil {
+				    return err
+				}
+				files[path.Join(vmPath, dir, dir+".vmx")] = true
 			}
 		}
 	default:
@@ -87,18 +91,18 @@ func (c *vmcli) getPathVIDs(path string) error {
 		}
 	}
 	for file, _ := range files {
-		path, err := PathNormalize(file)
+		vmxPath, err := PathNormalize(file)
 		if err != nil {
 			return err
 		}
-		name, err := PathToName(file)
+		name, err := PathToName(vmxPath)
 		if err != nil {
 			return err
 		}
 		vid := VID{
 			Name: name,
-			Path: path,
-			Id:   base64.StdEncoding.EncodeToString([]byte(path)),
+			Path: vmxPath,
+			Id:   base64.StdEncoding.EncodeToString([]byte(vmxPath)),
 		}
 		c.ById[vid.Id] = vid
 		c.ByName[vid.Name] = vid
@@ -363,11 +367,11 @@ func (c *vmcli) GetPath(config *VMConfig, key string, required bool) (string, er
 	if err != nil {
 		return "", err
 	}
-	path, err := PathnameFormat(c.v.Remote, value)
+	normalized, err := NormalizePath(value)
 	if err != nil {
 		return "", err
 	}
-	return path, nil
+	return normalized, nil
 }
 
 func (c *vmcli) GetBool(config *VMConfig, key string, required bool) (bool, error) {
@@ -472,11 +476,6 @@ func (c *vmcli) SetIsoStartConnected(vm *VM, connected bool) error {
 func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 	label := "ide1:0"
 
-	path, err := PathnameFormat(c.v.Remote, options.IsoFile)
-	if err != nil {
-		return err
-	}
-
 	command := fmt.Sprintf("disk setPresent %s %v", label, options.IsoPresent)
 	err = c.exec(vm, command, nil)
 	if err != nil {
@@ -487,7 +486,12 @@ func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 		return nil
 	}
 
-	command = fmt.Sprintf("disk setBackingInfo %s cdrom_image %s false", label, path)
+	hostPath, err := PathnameFormat(c.v.Remote, options.IsoFile)
+	if err != nil {
+		return err
+	}
+
+	command = fmt.Sprintf("disk setBackingInfo %s cdrom_image %s false", label, hostPath)
 	err = c.exec(vm, command, nil)
 	if err != nil {
 		return err

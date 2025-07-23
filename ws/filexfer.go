@@ -5,7 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -92,27 +92,26 @@ func (v *vmctl) DownloadFile(vm *VM, localPath, filename string) error {
 		return fmt.Errorf("invalid characters in '%s'", filename)
 	}
 
-	hostDir, _ := filepath.Split(vm.Path)
-	hostPath := filepath.Join(hostDir, filename)
+	vmDir, _ := path.Split(vm.Path)
+	filePath := path.Join(vmDir, filename)
 
 	local, err := isLocal()
 	if err != nil {
-
 		return err
 	}
 	if local {
-		hostPath, err := PathnameFormat(v.Local, hostPath)
+		hostPath, err := PathnameFormat(v.Local, filePath)
 		if err != nil {
 			return err
 		}
 		return v.copyFile(localPath, hostPath)
 	}
 
-	path, err := PathnameFormat("scp", hostPath)
+	hostPath, err := PathnameFormat("scp", filePath)
 	if err != nil {
 		return err
 	}
-	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, path)
+	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, hostPath)
 	args := []string{"-i", v.KeyFile, remoteSource, localPath}
 	_, err = v.exec("scp", args, "", nil)
 	return err
@@ -136,25 +135,25 @@ func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
 	if strings.ContainsAny(filename, ":/\\") {
 		return fmt.Errorf("invalid characters in '%s'", filename)
 	}
-	hostDir, _ := filepath.Split(vm.Path)
-	hostPath := filepath.Join(hostDir, filename)
+	vmDir, _ := path.Split(vm.Path)
+	filePath := path.Join(vmDir, filename)
 	local, err := isLocal()
 	if err != nil {
 		return err
 	}
 	if local {
-		hostPath, err := PathnameFormat(v.Local, hostPath)
+		hostPath, err := PathnameFormat(v.Local, filePath)
 		if err != nil {
 			return err
 		}
 		return v.copyFile(hostPath, localPath)
 	}
 
-	path, err := PathnameFormat("scp", hostPath)
+	hostPath, err := PathnameFormat("scp", filePath)
 	if err != nil {
 		return err
 	}
-	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, path)
+	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, hostPath)
 	args := []string{"-i", v.KeyFile, localPath, remoteTarget}
 	_, err = v.exec("scp", args, "", nil)
 	return err
