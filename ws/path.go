@@ -3,13 +3,16 @@ package ws
 import (
 	"fmt"
 	"log"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-const debug = false
+const debug = true
+
+const ALLOW_ABSOLUTE_ISO_PATH = false
 
 var DRIVE_LETTER = regexp.MustCompile(`^([a-zA-Z]:)(.*)`)
 var DRIVE_LETTER_NORMALIZED = regexp.MustCompile(`^(/[a-zA-Z]/)(.*)`)
@@ -29,89 +32,89 @@ func PathCompare(first, second string) (bool, error) {
 	return first == second, nil
 }
 
-func PathNormalize(path string) (string, error) {
+func PathNormalize(inPath string) (string, error) {
 	if debug {
-		log.Printf("PathNormalize(%s)\n", path)
+		log.Printf("PathNormalize(%s)\n", inPath)
 	}
-	match := DRIVE_LETTER.FindStringSubmatch(path)
+	match := DRIVE_LETTER.FindStringSubmatch(inPath)
 	//log.Printf("match: %d %v\n", len(match), match)
 	if len(match) == 3 {
 		if len(match[2]) == 0 || !strings.HasPrefix(match[2], "\\") {
-			return "", fmt.Errorf("cannot normalize path: %s", path)
+			return "", fmt.Errorf("PathNormalize parse failed: %s", inPath)
 		}
-		path = "\\" + string(match[1][0]) + match[2]
+		inPath = "\\" + string(match[1][0]) + match[2]
 	}
-	if strings.Contains(path, "\\") {
-		path = strings.ReplaceAll(path, "\\", "/")
+	if strings.Contains(inPath, "\\") {
+		inPath = strings.ReplaceAll(inPath, "\\", "/")
 	}
 
-	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
+	for strings.Contains(inPath, "//") {
+		inPath = strings.ReplaceAll(inPath, "//", "/")
 	}
 
 	if debug {
-		log.Printf("PathNormalize returning: %s\n", path)
+		log.Printf("PathNormalize returning: %s\n", inPath)
 	}
-	return path, nil
+	return inPath, nil
 }
 
-func PathFormat(os, path string) (string, error) {
+func PathFormat(os, inPath string) (string, error) {
 	if debug {
-		log.Printf("PathFormat(%s, %s)\n", os, path)
+		log.Printf("PathFormat(%s, %s)\n", os, inPath)
 	}
-	path, err := PathnameFormat(os, path)
+	inPath, err := PathnameFormat(os, inPath)
 	if err != nil {
 		return "", err
 	}
-	path = strings.TrimRight(path, "/\\")
+	inPath = strings.TrimRight(inPath, "/\\")
 	if debug {
-		log.Printf("PathFormat returning: %s\n", path)
+		log.Printf("PathFormat returning: %s\n", inPath)
 	}
-	return path, nil
+	return inPath, nil
 }
 
-func PathnameFormat(os, path string) (string, error) {
+func PathnameFormat(os, inPath string) (string, error) {
 	if debug {
-		log.Printf("PathnameFormat(%s, %s)\n", os, path)
+		log.Printf("PathnameFormat(%s, %s)\n", os, inPath)
 	}
-	path, err := PathNormalize(path)
+	inPath, err := PathNormalize(inPath)
 	if err != nil {
 		return "", err
 	}
 	switch os {
-	case "windows":
-		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(path)
+	case "windows", "scp":
+		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(inPath)
 		//log.Printf("match: %d %v\n", len(match), match)
 		if len(match) == 3 {
-			path = string(match[1][1]) + ":\\" + match[2]
+			driveLetter := match[1][1]
+			subPath := match[2]
+			inPath = fmt.Sprintf("%c:/%s", driveLetter, subPath)
 		}
-		path = strings.ReplaceAll(path, "/", "\\")
-	case "scp":
-		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(path)
-		if len(match) == 3 {
-			//log.Printf("match: %v\n", match)
-			path = fmt.Sprintf("%s:/%s", string(match[1][1]), match[2])
-			//log.Printf("path: %s\n", path)
+		if os == "windows" {
+			inPath = strings.ReplaceAll(inPath, "/", "\\")
 		}
 	case "default":
-		path = filepath.ToSlash(path)
+		inPath = filepath.ToSlash(inPath)
 	}
 	if debug {
-		log.Printf("PathnameFormat returning: %s\n", path)
+		log.Printf("PathnameFormat returning: %s\n", inPath)
 	}
-	return path, nil
+	return inPath, nil
 }
 
-func PathToName(path string) (string, error) {
+func PathToName(inPath string) (string, error) {
 	if debug {
-		log.Printf("PathToName(%s)\n", path)
+		log.Printf("PathToName(%s)\n", inPath)
 	}
-	path, err := PathNormalize(path)
+	inPath, err := PathNormalize(inPath)
 	if err != nil {
 		return "", err
 	}
-	_, filename := filepath.Split(path)
+	_, filename := path.Split(inPath)
 	name, _, _ := strings.Cut(filename, ".")
+	if name == "" {
+		return "", fmt.Errorf("cannot parse name from: '%s'", inPath)
+	}
 	if debug {
 		log.Printf("PathToName returning: %s\n", name)
 	}
@@ -146,25 +149,25 @@ func ParseFileList(os string, lines []string) ([]VMFile, error) {
 	return files, nil
 }
 
-func PathChdirCommand(os string, path string) (string, error) {
+func PathChdirCommand(os string, inPath string) (string, error) {
 	if debug {
-		log.Printf("PathChdirCommand(%s, %s)\n", os, path)
+		log.Printf("PathChdirCommand(%s, %s)\n", os, inPath)
 	}
 	var command string
-	path, err := PathNormalize(path)
+	inPath, err := PathNormalize(inPath)
 	if err != nil {
 		return "", nil
 	}
 	if os == "windows" {
-		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(path)
+		match := DRIVE_LETTER_NORMALIZED.FindStringSubmatch(inPath)
 		if len(match) == 3 {
 			command = string(match[1][1]) + ": & cd \\" + match[2] + " & "
 		} else {
-			command = "cd " + path + " & "
+			command = "cd " + inPath + " & "
 		}
 		command = strings.ReplaceAll(command, "/", "\\")
 	} else {
-		command = "cd " + path + " ; "
+		command = "cd " + inPath + " && "
 	}
 	if debug {
 		log.Printf("PathChdirCommand returning: %s\n", command)
@@ -172,69 +175,100 @@ func PathChdirCommand(os string, path string) (string, error) {
 	return command, nil
 }
 
-func IsIsoPath(path string) bool {
-	sep := string(filepath.Separator)
+func IsIsoPath(inPath string) (bool, error) {
+	nPath, err := PathNormalize(inPath)
+	if err != nil {
+		return false, err
+	}
 	ret := false
 	switch {
-	case path == "iso":
+	case nPath == "iso":
 		ret = true
-	case strings.HasPrefix(path, "iso"+sep):
+	case strings.HasPrefix(nPath, "iso/"):
 		ret = true
-	case strings.HasSuffix(path, sep+"iso"):
+	case strings.HasSuffix(nPath, "/iso"):
 		ret = true
 	}
 	if debug {
-		log.Printf("IsIsoPath(%s) returning: %v\n", path, ret)
+		log.Printf("IsIsoPath(%s) returning: %v\n", inPath, ret)
 	}
-	return ret
+	return ret, nil
 }
 
-func FormatIsoPath(isoPath, path string) string {
+func FormatIsoPath(isoPath, subPath string) (string, error) {
 	if debug {
-		log.Printf("FormatIsoPath(%s, %s)\n", isoPath, path)
+		log.Printf("FormatIsoPath(%s, %s)\n", isoPath, subPath)
 	}
-	sep := string(filepath.Separator)
+	nPath, err := PathNormalize(subPath)
+	if err != nil {
+		return "", err
+	}
+	nIsoPath, err := PathNormalize(isoPath)
+	if err != nil {
+		return "", err
+	}
+
 	// reject `^/.*`
-	if strings.HasPrefix(path, sep) {
-		return ""
+	if strings.HasPrefix(nPath, "/") {
+		if ALLOW_ABSOLUTE_ISO_PATH {
+			if debug {
+				log.Printf("FormatIsoPath returning: %s\n", nPath)
+			}
+			return nPath, nil
+		}
+		return "", fmt.Errorf("ISO subpath is absolute: '%s'", subPath)
 	}
-	// remove `/*$`
-	path = strings.TrimRight(path, sep)
-	if path == "iso" || path == "" {
-		return isoPath
+	// remove `/$`
+	nPath = strings.TrimRight(nPath, "/")
+	if nPath == "iso" {
+		nPath = ""
 	}
 	// remove `^iso/`
-	if strings.HasPrefix(path, "iso"+sep) {
-		path = path[4:]
+	if strings.HasPrefix(nPath, "iso/") {
+		nPath = nPath[4:]
 	}
-	// prepend isoPath
-	formatted := filepath.Join(isoPath, path)
+	fPath := nIsoPath
+	if nPath != "" {
+		// join to normalized isoPath
+		fPath = path.Join(nIsoPath, nPath)
+	}
 	if debug {
-		log.Printf("FormatIsoPath returning: %s\n", formatted)
+		log.Printf("FormatIsoPath returning: %s\n", fPath)
 	}
-	return formatted
+	return fPath, nil
 }
 
-func FormatIsoPathname(isoPath, path string) string {
+func FormatIsoPathname(isoPath, subPath string) (string, error) {
 	if debug {
-		log.Printf("FormatIsoPathname(%s, %s)\n", isoPath, path)
+		log.Printf("FormatIsoPathname(%s, %s)\n", isoPath, subPath)
 	}
-	dir, file := filepath.Split(path)
+	n, err := PathNormalize(subPath)
+	if err != nil {
+		return "", err
+	}
+	subPath = n
+	n, err = PathNormalize(isoPath)
+	if err != nil {
+		return "", err
+	}
+	isoPath = n
+
+	dir, file := path.Split(subPath)
 	if file == "" {
-		return ""
+		return "", fmt.Errorf("missing filename in: '%s'", subPath)
 	}
-	log.Printf("isoPath=%s path=%s dir=%s file=%s\n", isoPath, path, dir, file)
-	if strings.HasPrefix(dir, "iso"+string(filepath.Separator)) {
-		dir = filepath.Join(isoPath, dir[4:])
-	} else if !strings.HasPrefix(dir, string(filepath.Separator)) {
-		dir = filepath.Join(isoPath, dir)
+	//log.Printf("isoPath=%s subPath=%s dir=%s file=%s\n", isoPath, subPath, dir, file)
+	if strings.HasPrefix(dir, "iso/") {
+		dir = path.Join(isoPath, dir[4:])
+	} else if !strings.HasPrefix(dir, "/") {
+		dir = path.Join(isoPath, dir)
 	}
 	if !strings.HasSuffix(file, ".iso") {
 		file += ".iso"
 	}
-	formatted := filepath.Join(dir, file)
+	formatted := path.Join(dir, file)
 	if debug {
 		log.Printf("FormatIsoPathname returning: %s\n", formatted)
 	}
-	return formatted
+	return formatted, nil
 }

@@ -103,11 +103,15 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	if isoOptions.IsoFile != "" {
-		path, err := PathnameFormat(v.Remote, FormatIsoPathname(v.IsoPath, isoOptions.IsoFile))
+		isoPathname, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
 		if err != nil {
 			return vm, err
 		}
-		isoOptions.IsoFile = path
+		hostIsoPathname, err := PathnameFormat(v.Remote, isoPathname)
+		if err != nil {
+			return vm, err
+		}
+		isoOptions.IsoFile = hostIsoPathname
 	}
 
 	//fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)

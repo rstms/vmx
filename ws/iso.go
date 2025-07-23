@@ -35,7 +35,10 @@ func (v *vmctl) CheckISODownload(options *IsoOptions) error {
 func (v *vmctl) downloadISO(url, cert, key, ca string) (string, error) {
 
 	_, basename := path.Split(url)
-	pathname := FormatIsoPathname(v.IsoPath, basename)
+	pathname, err := FormatIsoPathname(v.IsoPath, basename)
+	if err != nil {
+		return "", err
+	}
 	hostPathname, err := PathnameFormat(v.Remote, pathname)
 	if err != nil {
 		return "", err

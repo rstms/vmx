@@ -56,10 +56,12 @@ long listing.
 		if len(args) > 0 {
 			vid = args[0]
 		}
+		iso, err := ws.IsIsoPath(vid)
+		cobra.CheckErr(err)
 		options := ws.FilesOptions{
 			Detail: ViperGetBool("long"),
 			All:    ViperGetBool("all"),
-			Iso:    ws.IsIsoPath(vid),
+			Iso:    iso,
 		}
 		lines, err := vmx.Files(vid, options)
 		cobra.CheckErr(err)

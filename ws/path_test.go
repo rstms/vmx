@@ -1,17 +1,34 @@
 package ws
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"log"
+	"os"
 	"testing"
 )
 
+func dumpConfig(t *testing.T) {
+	filename := viper.ConfigFileUsed()
+	fmt.Printf("configFileUsed: %s\n", filename)
+	dir, err := os.Getwd()
+	require.Nil(t, err)
+	fmt.Printf("current directory: %s\n", dir)
+	var buf bytes.Buffer
+	err = viper.WriteConfigTo(&buf)
+	require.Nil(t, err)
+	fmt.Println(buf.String())
+}
+
 func initTestConfig(t *testing.T) {
+
 	viper.SetConfigFile("testdata/config.yaml")
 	err := viper.ReadInConfig()
 	require.Nil(t, err)
+	viper.Set("debug", true)
+	viper.Set("vmx.debug", true)
 }
 
 func TestPathToName(t *testing.T) {
@@ -33,6 +50,7 @@ func TestPathToName(t *testing.T) {
 }
 
 func TestPathToNameNormalizeError(t *testing.T) {
+	initTestConfig(t)
 	_, err := PathToName("D:file.ext")
 	require.NotNil(t, err)
 	log.Println(err)
@@ -54,6 +72,7 @@ func TestPathNormalize(t *testing.T) {
 }
 
 func TestPathnameFormat(t *testing.T) {
+	initTestConfig(t)
 	normalized := "/C/dir/subdir/file.ext"
 	windowsFormatted := "C:\\dir\\subdir\\file.ext"
 	unixFormatted := "/C/dir/subdir/file.ext"
@@ -119,6 +138,7 @@ func TestFileListUnix(t *testing.T) {
 }
 
 func TestIsIsoPath(t *testing.T) {
+	initTestConfig(t)
 	var testData map[string]bool = map[string]bool{
 		"iso":           true,
 		"iso/":          true,
@@ -143,7 +163,8 @@ func TestIsIsoPath(t *testing.T) {
 	}
 
 	for input, expected := range testData {
-		result := IsIsoPath(input)
+		result, err := IsIsoPath(input)
+		require.Nil(t, err)
 		display := fmt.Sprintf("IsIsoPath(%s) -> %v", input, result)
 		require.Equal(t, expected, result, display)
 		log.Println(display)
@@ -151,6 +172,7 @@ func TestIsIsoPath(t *testing.T) {
 }
 
 func TestFormatIsoPath(t *testing.T) {
+	initTestConfig(t)
 	var testData map[string]string = map[string]string{
 		"":              "/H/vmware/iso",
 		"iso":           "/H/vmware/iso",
@@ -175,7 +197,12 @@ func TestFormatIsoPath(t *testing.T) {
 	}
 
 	for input, expected := range testData {
-		result := FormatIsoPath("/H/vmware/iso", input)
+		result, err := FormatIsoPath("/H/vmware/iso", input)
+		if expected == "" {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+		}
 		display := fmt.Sprintf("FormatIsoPath(%s) -> %v", input, result)
 		require.Equal(t, expected, result, display)
 		log.Println(display)
@@ -183,6 +210,7 @@ func TestFormatIsoPath(t *testing.T) {
 }
 
 func TestFormatIsoPathname(t *testing.T) {
+	initTestConfig(t)
 	var testData map[string]string = map[string]string{
 		"/":        "",
 		"":         "",
@@ -212,7 +240,12 @@ func TestFormatIsoPathname(t *testing.T) {
 		"/foo/bar/baz/":         "",
 	}
 	for input, expected := range testData {
-		result := FormatIsoPathname("/H/vmware/iso", input)
+		result, err := FormatIsoPathname("/H/vmware/iso", input)
+		if expected == "" {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+		}
 		display := fmt.Sprintf("FormatIsoPathname(%s) -> %v", input, result)
 		require.Equal(t, expected, result, display)
 		log.Println(display)
@@ -220,7 +253,7 @@ func TestFormatIsoPathname(t *testing.T) {
 }
 
 func TestPathFormat(t *testing.T) {
-
+	initTestConfig(t)
 	path, err := PathFormat("unix", "/sub/dir")
 	require.Nil(t, err)
 	require.Equal(t, "/sub/dir", path)

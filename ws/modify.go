@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"fmt"
 	"log"
 )
 
@@ -54,14 +53,14 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", isoOptions.IsoFile, v.IsoPath)
 		}
 
-		path := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
-		if path == "" {
-			return nil, fmt.Errorf("failed formatting ISO pathname: %s", isoOptions.IsoFile)
+		isoPathname, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
+		if err != nil {
+			return nil, err
 		}
 		if v.debug {
-			log.Printf("normalized=%s\n", path)
+			log.Printf("isoPathname=%s\n", isoPathname)
 		}
-		action, err := vmx.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, path)
+		action, err := vmx.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoPathname)
 		if err != nil {
 			return nil, err
 		}
@@ -113,6 +112,8 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		}
 		actions = append(actions, action)
 	}
+
+	// FIXME: add unimplemented options.ModifyXXXXX from CreateOptions
 
 	editedData, err := vmx.Read()
 	if err != nil {

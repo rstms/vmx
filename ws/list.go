@@ -2,8 +2,9 @@ package ws
 
 import (
 	"log"
-	"path/filepath"
+	"path"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -23,12 +24,15 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	}
 
 	lines := []string{}
-	sep := string(filepath.Separator)
 
 	pattern := VMX_PATTERN
 	var paths []string
 	if options.Iso {
-		paths = []string{FormatIsoPath(v.IsoPath, vid)}
+		p, err := FormatIsoPath(v.IsoPath, vid)
+		if err != nil {
+			return lines, err
+		}
+		paths = []string{p}
 		pattern = ISO_PATTERN
 	} else if vid == "" {
 		vmids, err := v.cli.GetVIDs()
@@ -36,62 +40,73 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 			return lines, err
 		}
 		for _, vmid := range vmids {
-			path, _ := filepath.Split(vmid.Path)
-			log.Printf("Files path: %s\n", path)
-			paths = append(paths, path)
+			vmPath, _ := path.Split(vmid.Path)
+			log.Printf("Files path: %s\n", vmPath)
+			paths = append(paths, vmPath)
 		}
 	} else {
 		vm, err := v.cli.GetVM(vid)
 		if err != nil {
 			return lines, err
 		}
-		path, _ := filepath.Split(vm.Path)
-		paths = []string{path}
+		vmPath, _ := path.Split(vm.Path)
+		paths = []string{vmPath}
 	}
 
 	if options.Detail || options.All {
 		pattern = ALL_PATTERN
 	}
 
-	for i, path := range paths {
-		paths[i] = strings.TrimRight(paths[i], sep)
-		plines, err := v.listFiles(path, options.Detail, pattern)
+	for _, listPath := range paths {
+		plines, err := v.listFiles(listPath, options.Detail, pattern)
 		if err != nil {
 			return lines, err
 		}
 		lines = append(lines, plines...)
 	}
 
+	if !options.Detail {
+		sort.Strings(lines)
+	}
+
 	return lines, nil
 }
 
-func (v *vmctl) listFiles(path string, detail bool, pattern *regexp.Regexp) ([]string, error) {
+func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) ([]string, error) {
 
 	if v.debug {
-		log.Printf("listFiles(%s, %v, %+v)\n", path, detail, *pattern)
+		log.Printf("listFiles(%s, %v, %+v)\n", listPath, detail, *pattern)
 	}
 
 	lines := []string{}
 
-	hostPath, err := PathnameFormat(v.Remote, path)
+	n, err := PathNormalize(listPath)
 	if err != nil {
 		return lines, err
 	}
-	path = hostPath
+	if n != listPath {
+		log.Printf("WARNING: listFiles received non-normalized path: '%s'\n", listPath)
+		listPath = n
+	}
+
+	hostPath, err := PathnameFormat(v.Remote, listPath)
+	if err != nil {
+		return lines, err
+	}
 
 	var command string
 	if v.Remote == "windows" {
 		if detail {
-			command = "dir /-C " + path
+			command = "dir /-C " + hostPath
 
 		} else {
-			command = "dir /B " + path
+			command = "dir /B " + hostPath
 		}
 	} else {
 		if detail {
-			command = "ls -al " + path
+			command = "ls -al " + hostPath
 		} else {
-			command = "ls " + path
+			command = "ls " + hostPath
 		}
 	}
 
@@ -105,10 +120,11 @@ func (v *vmctl) listFiles(path string, detail bool, pattern *regexp.Regexp) ([]s
 	for _, line := range olines {
 		line = strings.TrimSpace(line)
 		log.Printf("listFiles.line: %s\n", line)
+		// FIXME: detail (--long) implies (--all) -- not documented as such
 		if detail {
 			lines = append(lines, line)
 		} else if pattern.MatchString(line) {
-			nline, err := PathNormalize(filepath.Join(strings.TrimRight(path, "/\\"), line))
+			nline, err := PathNormalize(path.Join(listPath, line))
 			if err != nil {
 				return lines, err
 			}
