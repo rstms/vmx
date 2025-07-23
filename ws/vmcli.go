@@ -73,11 +73,11 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		for _, dir := range dirs {
 			dir = strings.TrimSpace(dir)
 			if dir != "" {
-				localPath, err := PathNormalize(dir)
+				normalDir, err := PathNormalize(dir)
 				if err != nil {
-				    return err
+					return err
 				}
-				files[path.Join(vmPath, dir, dir+".vmx")] = true
+				files[path.Join(vmPath, normalDir, normalDir+".vmx")] = true
 			}
 		}
 	default:
@@ -367,7 +367,7 @@ func (c *vmcli) GetPath(config *VMConfig, key string, required bool) (string, er
 	if err != nil {
 		return "", err
 	}
-	normalized, err := NormalizePath(value)
+	normalized, err := PathNormalize(value)
 	if err != nil {
 		return "", err
 	}
@@ -477,7 +477,7 @@ func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 	label := "ide1:0"
 
 	command := fmt.Sprintf("disk setPresent %s %v", label, options.IsoPresent)
-	err = c.exec(vm, command, nil)
+	err := c.exec(vm, command, nil)
 	if err != nil {
 		return err
 	}
