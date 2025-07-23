@@ -38,6 +38,8 @@ ethernet0.present = "FALSE"
 
 var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
+var ISO_FILENAME_PATTERN = regexp.MustCompile(`^ide1:0\.fileName = "([^"]*)"`)
+var ISO_PRESENT_PATTERN = regexp.MustCompile(`^ide1:0\.present = "([^"]*)"`)
 
 // OS names generated using the error message from this command:
 // 'vmcli VM create -n notavalidname -d /notavaliddir -g notavalidosname
@@ -164,7 +166,7 @@ func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) ([]string
 	actions = append(actions, action)
 
 	if isoOptions != nil {
-		action, err = v.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoOptions.IsoFile)
+		action, err = v.SetISO(isoOptions)
 		if err != nil {
 			return actions, err
 		}
@@ -297,30 +299,45 @@ func (v *VMX) SetEFI(efi bool) (string, error) {
 	return "set boot firmware: 'BIOS'", nil
 }
 
-func (v *VMX) SetISO(present, bootConnected bool, path string) (string, error) {
+func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 
 	if v.debug {
-		log.Printf("SetIso(present=%v, bootConnected=%v, path=%s)\n", present, bootConnected, path)
+		log.Printf("SetISO(%+v)\n", *options)
+	}
+
+	if options.ModifyBootConnected {
+		for _, line := range v.lines {
+			m := ISO_FILENAME_PATTERN.FindStringSubmatch(line)
+			if len(m) == 2 {
+				options.IsoFile = m[1]
+			}
+			m = ISO_PRESENT_PATTERN.FindStringSubmatch(line)
+			if len(m) == 2 {
+				options.IsoPresent = m[1] == "TRUE"
+			}
+		}
+		//log.Printf("ModifyBootConected: %+v\n", *options)
 	}
 
 	v.removePrefix("ide1:0.")
-	if !present {
+	if !options.IsoPresent {
 		v.addLine(`ide1:0.present = "FALSE"`)
 		return "removed CD/DVD ISO", nil
 	}
 	v.addLine(`ide1:0.present = "TRUE"`)
 	v.addLine(`ide1:0.deviceType = "cdrom-image"`)
-	normalized, err := PathNormalize(path)
+
+	normalized, err := PathNormalize(options.IsoFile)
 	if err != nil {
 		return "", err
 	}
-	hostPath, err := PathnameFormat(v.hostOS, path)
+	hostPath, err := PathFormat(v.hostOS, normalized)
 	if err != nil {
 		return "", err
 	}
 	v.addLine(`ide1:0.fileName = "` + hostPath + `"`)
 	var atBoot string
-	if bootConnected {
+	if options.IsoBootConnected {
 		v.addLine(`ide1:0.startConnected = "TRUE"`)
 		atBoot = "connected"
 	} else {

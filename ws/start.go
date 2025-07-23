@@ -44,9 +44,39 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 
 	var savedBootConnected bool
 	if isoOptions.ModifyISO {
-		savedBootConnected, err = v.cli.GetIsoStartConnected(&vm)
+		var currentIsoOptions IsoOptions
+		err := v.cli.GetIsoOptions(&vm, &currentIsoOptions)
 		if err != nil {
 			return "", err
+		}
+
+		savedBootConnected = currentIsoOptions.IsoBootConnected
+
+		//log.Printf("start: current ISO Options: %+v\n", currentIsoOptions)
+		//log.Printf("start: new ISO Options: %+v\n", isoOptions)
+
+		if !isoOptions.ModifyBootConnected {
+			if isoOptions.IsoPresent != currentIsoOptions.IsoPresent {
+				msg := fmt.Sprintf("[%s] setting ISO present: %v", vm.Name, isoOptions.IsoPresent)
+				if v.verbose {
+					fmt.Println(msg)
+				}
+				log.Println(msg)
+			}
+			if isoOptions.IsoPresent && (isoOptions.IsoFile != currentIsoOptions.IsoFile) {
+				msg := fmt.Sprintf("[%s] setting ISO file: %s", vm.Name, isoOptions.IsoFile)
+				if v.verbose {
+					fmt.Println(msg)
+				}
+				log.Println(msg)
+			}
+		}
+		if !isoOptions.IsoBootConnected != currentIsoOptions.IsoBootConnected {
+			msg := fmt.Sprintf("[%s] setting ISO boot connected: %v", vm.Name, isoOptions.IsoBootConnected)
+			if v.verbose {
+				fmt.Println(msg)
+			}
+			log.Println(msg)
 		}
 		_, err = v.Modify(vid, CreateOptions{}, isoOptions)
 		if err != nil {
@@ -106,7 +136,11 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 
 		if isoOptions.ModifyISO {
 			if savedBootConnected != isoOptions.IsoBootConnected {
-				log.Printf("[%s] restoring saved ISO BootConnected state: %v\n", vm.Name, savedBootConnected)
+				msg := fmt.Sprintf("[%s] restoring ISO boot connected: %v\n", vm.Name, savedBootConnected)
+				if v.verbose {
+					fmt.Println(msg)
+				}
+				log.Println(msg)
 				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
 				if err != nil {
 					return "", err

@@ -31,8 +31,6 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -46,9 +44,7 @@ Show the status of the selected instance.
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		status, err := vmx.GetProperty(vid, "status")
-		cobra.CheckErr(err)
-		fmt.Println(status)
+		OutputInstanceState(vid, "status")
 	},
 }
 

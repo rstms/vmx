@@ -45,6 +45,9 @@ var configCmd = &cobra.Command{
 write current configuration data to stdout in YAML format
 `,
 	Run: func(cmd *cobra.Command, args []string) {
+		if !ViperGetBool("no-init") {
+			InitController()
+		}
 		file, err := os.CreateTemp("", "*.yaml")
 		cobra.CheckErr(err)
 		func() {
@@ -67,4 +70,5 @@ write current configuration data to stdout in YAML format
 
 func init() {
 	rootCmd.AddCommand(configCmd)
+	OptionSwitch(configCmd, "no-init", "", "disable controller startup")
 }

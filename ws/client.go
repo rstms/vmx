@@ -23,9 +23,6 @@ type APIClient struct {
 
 func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]string) (*APIClient, error) {
 
-	ViperSetDefault("disable_keepalives", true)
-	ViperSetDefault("idle_conn_timeout", 5)
-
 	api := APIClient{
 		URL:     url,
 		Headers: make(map[string]string),

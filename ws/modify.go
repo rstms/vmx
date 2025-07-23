@@ -52,15 +52,18 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		if v.debug {
 			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", isoOptions.IsoFile, v.IsoPath)
 		}
-
-		isoPathname, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
-		if err != nil {
-			return nil, err
+		if isoOptions.IsoFile != "" {
+			err := v.CheckISODownload(&vm, &isoOptions)
+			if err != nil {
+				return nil, err
+			}
+			formatted, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
+			if err != nil {
+				return nil, err
+			}
+			isoOptions.IsoFile = formatted
 		}
-		if v.debug {
-			log.Printf("isoPathname=%s\n", isoPathname)
-		}
-		action, err := vmx.SetISO(isoOptions.IsoPresent, isoOptions.IsoBootConnected, isoPathname)
+		action, err := vmx.SetISO(&isoOptions)
 		if err != nil {
 			return nil, err
 		}

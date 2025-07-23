@@ -109,6 +109,7 @@ func init() {
 	OptionString(rootCmd, "iso-ca", "", "", "CA for ISO URL download")
 	OptionString(rootCmd, "iso-cert", "", "", "client certificate for ISO URL download")
 	OptionString(rootCmd, "iso-key", "", "", "client cert key for ISO URL download")
+	OptionSwitch(rootCmd, "iso-attach", "", "set CD/DVD attached at boot")
 	OptionSwitch(rootCmd, "iso-detach", "", "set CD/DVD detached at boot")
 	OptionSwitch(rootCmd, "iso-disable", "", "remove the CD/DVD ISO device")
 }
@@ -143,9 +144,24 @@ func InitIsoOptions() (*ws.IsoOptions, error) {
 	if enable && disable {
 		return nil, fmt.Errorf("conflict: iso/iso-disable")
 	}
+
+	// ModifyBootConnected is set when ONLY IsoBootConnected is being changed
+
+	if ViperGetBool("iso_attach") {
+		options.ModifyISO = true
+		options.ModifyBootConnected = true
+		options.IsoBootConnected = true
+	}
+	if ViperGetBool("iso_detach") {
+		options.ModifyISO = true
+		options.ModifyBootConnected = true
+		options.IsoBootConnected = false
+	}
+
 	switch {
 	case enable:
 		options.ModifyISO = true
+		options.ModifyBootConnected = false
 		options.IsoPresent = true
 		options.IsoFile = iso
 		options.IsoBootConnected = true
@@ -154,12 +170,8 @@ func InitIsoOptions() (*ws.IsoOptions, error) {
 		options.IsoClientKey = ViperGetString("iso_key")
 	case disable:
 		options.ModifyISO = true
+		options.ModifyBootConnected = false
 		options.IsoPresent = false
-	}
-
-	if ViperGetBool("iso_detach") {
-		options.ModifyISO = true
-		options.IsoBootConnected = false
 	}
 
 	return &options, nil

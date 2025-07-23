@@ -7,23 +7,24 @@ import (
 )
 
 type IsoOptions struct {
-	ModifyISO        bool
-	IsoPresent       bool
-	IsoFile          string
-	IsoCA            string
-	IsoClientCert    string
-	IsoClientKey     string
-	IsoBootConnected bool
+	ModifyISO           bool
+	IsoPresent          bool
+	IsoFile             string
+	IsoCA               string
+	IsoClientCert       string
+	IsoClientKey        string
+	IsoBootConnected    bool
+	ModifyBootConnected bool
 }
 
-func (v *vmctl) CheckISODownload(options *IsoOptions) error {
+func (v *vmctl) CheckISODownload(vm *VM, options *IsoOptions) error {
 
 	if !options.ModifyISO {
 		return nil
 	}
 	// if IsoFile is a URL, download the ISO
 	if strings.HasPrefix(options.IsoFile, "http:") || strings.HasPrefix(options.IsoFile, "https:") {
-		filename, err := v.downloadISO(options.IsoFile, options.IsoClientCert, options.IsoClientKey, options.IsoCA)
+		filename, err := v.downloadISO(vm, options.IsoFile, options.IsoClientCert, options.IsoClientKey, options.IsoCA)
 		if err != nil {
 			return err
 		}
@@ -32,19 +33,49 @@ func (v *vmctl) CheckISODownload(options *IsoOptions) error {
 	return nil
 }
 
-func (v *vmctl) downloadISO(url, cert, key, ca string) (string, error) {
+func (v *vmctl) uploadTLSCredential(vm *VM, pathname string) (string, error) {
 
-	_, basename := path.Split(url)
-	pathname, err := FormatIsoPathname(v.IsoPath, basename)
+	certsPath := ViperGetString("certs_path")
+	hostCertsDir, err := PathFormat(v.Remote, certsPath)
 	if err != nil {
 		return "", err
 	}
-	hostPathname, err := PathnameFormat(v.Remote, pathname)
+	var exit int
+	_, err = v.RemoteExec("mkdir "+hostCertsDir, &exit)
 	if err != nil {
 		return "", err
 	}
 
-	clientCertArg := ""
+	normalized, err := PathNormalize(pathname)
+	if err != nil {
+		return "", err
+	}
+	_, name := path.Split(normalized)
+
+	vmCredential := path.Join(certsPath, name)
+	err = v.UploadFile(vm, normalized, vmCredential)
+	if err != nil {
+		return "", err
+	}
+	hostCredential, err := PathnameFormat(v.Remote, vmCredential)
+	if err != nil {
+		return "", err
+	}
+	return hostCredential, nil
+}
+
+func (v *vmctl) downloadISO(vm *VM, url, cert, key, ca string) (string, error) {
+
+	_, filename := path.Split(url)
+
+	// generate a normalized full pathname for the ISO file
+	vmxIsoFile, err := FormatIsoPathname(v.IsoPath, filename)
+	if err != nil {
+		return "", err
+	}
+
+	command := ViperGetString("iso_download.command")
+
 	if cert != "" || key != "" {
 		if key == "" {
 			return "", fmt.Errorf("missing key for client certificate file: '%s'", cert)
@@ -52,19 +83,45 @@ func (v *vmctl) downloadISO(url, cert, key, ca string) (string, error) {
 		if cert == "" {
 			return "", fmt.Errorf("missing client certificate for key file: '%s'", key)
 		}
-		clientCertArg = fmt.Sprintf(" --cert %s --key %s", cert, key)
+
+		hostCert, err := v.uploadTLSCredential(vm, cert)
+		if err != nil {
+			return "", err
+		}
+		hostKey, err := v.uploadTLSCredential(vm, key)
+		if err != nil {
+			return "", err
+		}
+		cert_flag := ViperGetString("iso_download.cert_flag")
+		key_flag := ViperGetString("iso_download.key_flag")
+		command += fmt.Sprintf(" %s %s %s %s", cert_flag, hostCert, key_flag, hostKey)
 	}
 
-	caArg := ""
 	if ca != "" {
-		caArg = fmt.Sprintf(" --cacert %s", ca)
+		hostCA, err := v.uploadTLSCredential(vm, ca)
+		if err != nil {
+			return "", err
+		}
+		key_flag := ViperGetString("iso_download.ca_flag")
+		command += fmt.Sprintf(" %s %s", key_flag, hostCA)
 	}
 
-	command := fmt.Sprintf("curl -L -s%s%s %s", clientCertArg, caArg, hostPathname)
+	filename_flag := ViperGetString("iso_download.filename_flag")
+	hostFilename, err := PathFormat(v.Remote, vmxIsoFile)
+	if err != nil {
+		return "", err
+	}
+
+	command += fmt.Sprintf(" %s %s %s", filename_flag, hostFilename, url)
+
+	if v.verbose {
+		fmt.Printf("[%s] downloading %s to %s", vm.Name, url, vmxIsoFile)
+	}
 
 	_, err = v.RemoteExec(command, nil)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
-	return basename, err
+
+	return vmxIsoFile, err
 }

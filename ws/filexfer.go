@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"strings"
 )
 
 func (v *vmctl) ReadHostFile(vm *VM, filename string) ([]byte, error) {
@@ -24,7 +23,7 @@ func (v *vmctl) ReadHostFile(vm *VM, filename string) ([]byte, error) {
 	}
 	defer os.Remove(localPath)
 
-	err = v.DownloadFile(vm, localPath, filename)
+	err = v.Download(vm.Name, localPath, filename)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -49,7 +48,7 @@ func (v *vmctl) WriteHostFile(vm *VM, filename string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	return v.UploadFile(vm, localPath, filename)
+	return v.Upload(vm.Name, localPath, filename)
 }
 
 func (v *vmctl) copyFile(dstPath, srcPath string) error {
@@ -72,89 +71,91 @@ func (v *vmctl) copyFile(dstPath, srcPath string) error {
 
 }
 
-func (v *vmctl) Download(vid, localPath, filename string) error {
+func (v *vmctl) Download(vid string, localDestPathname, vmDirFilename string) error {
 	if v.debug {
-		log.Printf("Download(%s, %s, %s)\n", vid, localPath, filename)
+		log.Printf("Download(%s, %s, %s)\n", vid, localDestPathname, vmDirFilename)
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return err
 	}
-	return v.DownloadFile(&vm, localPath, filename)
+	dir, _ := path.Split(vm.Path)
+	remoteSourcePathname := path.Join(dir, vmDirFilename)
+	return v.DownloadFile(&vm, localDestPathname, remoteSourcePathname)
 }
 
-func (v *vmctl) DownloadFile(vm *VM, localPath, filename string) error {
+func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname string) error {
 	if v.debug {
-		log.Printf("DownloadFile(%s, %s, %s)\n", vm.Name, localPath, filename)
+		log.Printf("DownloadFile(%s, %s, %s)\n", vm.Name, localDestPathname, remoteSourcePathname)
 	}
 
-	if strings.ContainsAny(filename, ":/\\") {
-		return fmt.Errorf("invalid characters in '%s'", filename)
+	localDest, err := PathnameFormat(v.Local, localDestPathname)
+	if err != nil {
+		return err
 	}
-
-	vmDir, _ := path.Split(vm.Path)
-	filePath := path.Join(vmDir, filename)
 
 	local, err := isLocal()
 	if err != nil {
 		return err
 	}
 	if local {
-		hostPath, err := PathnameFormat(v.Local, filePath)
+		localSource, err := PathnameFormat(v.Local, remoteSourcePathname)
 		if err != nil {
 			return err
 		}
-		return v.copyFile(localPath, hostPath)
+		return v.copyFile(localDest, localSource)
 	}
 
-	hostPath, err := PathnameFormat("scp", filePath)
+	sourcePath, err := PathnameFormat("scp", remoteSourcePathname)
 	if err != nil {
 		return err
 	}
-	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, hostPath)
-	args := []string{"-i", v.KeyFile, remoteSource, localPath}
+	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, sourcePath)
+	args := []string{"-i", v.KeyFile, remoteSource, localDest}
 	_, err = v.exec("scp", args, "", nil)
 	return err
 }
 
-func (v *vmctl) Upload(vid, localPath, filename string) error {
+func (v *vmctl) Upload(vid, localSourcePathname, vmDirFilename string) error {
 	if v.debug {
-		log.Printf("Upload(%s, %s, %s)\n", vid, localPath, filename)
+		log.Printf("Upload(%s, %s, %s)\n", vid, localSourcePathname, vmDirFilename)
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return err
 	}
-	return v.UploadFile(&vm, localPath, filename)
+	dir, _ := path.Split(vm.Path)
+	remoteDestPathname := path.Join(dir, vmDirFilename)
+	return v.UploadFile(&vm, localSourcePathname, remoteDestPathname)
 }
 
-func (v *vmctl) UploadFile(vm *VM, localPath, filename string) error {
+func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname string) error {
 	if v.debug {
-		log.Printf("UploadFile(%s, %s, %s)\n", vm.Name, localPath, filename)
+		log.Printf("UploadFile(%s, %s, %s)\n", vm.Name, localSourcePathname, remoteDestPathname)
 	}
-	if strings.ContainsAny(filename, ":/\\") {
-		return fmt.Errorf("invalid characters in '%s'", filename)
+
+	localSource, err := PathnameFormat(v.Local, localSourcePathname)
+	if err != nil {
+		return err
 	}
-	vmDir, _ := path.Split(vm.Path)
-	filePath := path.Join(vmDir, filename)
 	local, err := isLocal()
 	if err != nil {
 		return err
 	}
 	if local {
-		hostPath, err := PathnameFormat(v.Local, filePath)
+		localDest, err := PathnameFormat(v.Local, remoteDestPathname)
 		if err != nil {
 			return err
 		}
-		return v.copyFile(hostPath, localPath)
+		return v.copyFile(localDest, localSource)
 	}
 
-	hostPath, err := PathnameFormat("scp", filePath)
+	remoteDest, err := PathnameFormat("scp", remoteDestPathname)
 	if err != nil {
 		return err
 	}
-	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, hostPath)
-	args := []string{"-i", v.KeyFile, localPath, remoteTarget}
+	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, remoteDest)
+	args := []string{"-i", v.KeyFile, localSource, remoteTarget}
 	_, err = v.exec("scp", args, "", nil)
 	return err
 }

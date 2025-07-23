@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/user"
 	"regexp"
 	"runtime"
 	"strings"
@@ -158,6 +159,22 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 func NewController() (Controller, error) {
 
 	ViperInit("vmx.")
+	ViperSetDefault("vmware_roots", []string{"/var/vmware"})
+	ViperSetDefault("iso_path", "/var/vmware/iso")
+	ViperSetDefault("certs_path", "/var/vmware/iso/certs")
+	ViperSetDefault("disable_keepalives", true)
+	ViperSetDefault("idle_conn_timeout", 5)
+	ViperSetDefault("iso_download.command", "curl --location --silent")
+	ViperSetDefault("iso_download.ca_flag", "--cacert")
+	ViperSetDefault("iso_download.client_cert_flag", "--cert")
+	ViperSetDefault("iso_download.client_key_flag", "--key")
+	ViperSetDefault("iso_download.filename_flag", "--output")
+	ViperSetDefault("host", "localhost")
+	user, err := user.Current()
+	if err != nil {
+		return &vmctl{}, err
+	}
+	ViperSetDefault("user", user.Username)
 
 	v := vmctl{
 		Hostname: ViperGetString("host"),
@@ -168,7 +185,6 @@ func NewController() (Controller, error) {
 		Version:  Version,
 	}
 
-	ViperSetDefault("vmware_roots", []string{"/var/vmware"})
 	roots := ViperGetStringSlice("vmware_roots")
 	v.Roots = make([]string, len(roots))
 	for i, root := range roots {
@@ -178,7 +194,6 @@ func NewController() (Controller, error) {
 		}
 		v.Roots[i] = normalized
 	}
-	ViperSetDefault("iso_path", "/var/vmware/iso")
 	path, err := PathNormalize(os.ExpandEnv(ViperGetString("iso_path")))
 	if err != nil {
 		return nil, err

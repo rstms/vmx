@@ -36,8 +36,9 @@ import (
 )
 
 var startCmd = &cobra.Command{
-	Use:   "start VID",
-	Short: "start a VM instance",
+	Use:     "start VID",
+	Aliases: []string{"restart"},
+	Short:   "start a VM instance",
 	Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
 
@@ -48,6 +49,14 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
+
+		if cmd.CalledAs() == "restart" {
+			options := ws.StopOptions{
+				Wait: true,
+			}
+			_, err := vmx.Stop(vid, options)
+			cobra.CheckErr(err)
+		}
 
 		options := ws.StartOptions{
 			Background: ViperGetBool("background"),
