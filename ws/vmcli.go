@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"path"
 	"strconv"
 	"strings"
@@ -13,13 +14,14 @@ type VMConfig map[string]any
 
 type vmcli struct {
 	v      *vmctl
-	ByPath map[string]VID
-	ByName map[string]VID
-	ById   map[string]VID
+	debug  bool
+	ByPath map[string]*VID
+	ByName map[string]*VID
+	ById   map[string]*VID
 }
 
 func NewCliClient(v *vmctl) *vmcli {
-	c := vmcli{v: v}
+	c := vmcli{v: v, debug: ViperGetBool("debug")}
 	return &c
 }
 
@@ -42,9 +44,9 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 	return nil
 }
 
-func (c *vmcli) GetVIDs() ([]VID, error) {
+func (c *vmcli) GetVIDs() ([]*VID, error) {
 	c.Reset()
-	vids := []VID{}
+	vids := []*VID{}
 	for _, rootPath := range c.v.Roots {
 		err := c.getPathVIDs(rootPath)
 		if err != nil {
@@ -91,30 +93,43 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		}
 	}
 	for file, _ := range files {
-		vmxPath, err := PathNormalize(file)
+		_, err := c.newVID(file)
 		if err != nil {
 			return err
 		}
-		name, err := PathToName(vmxPath)
-		if err != nil {
-			return err
-		}
-		vid := VID{
-			Name: name,
-			Path: vmxPath,
-			Id:   base64.StdEncoding.EncodeToString([]byte(vmxPath)),
-		}
-		c.ById[vid.Id] = vid
-		c.ByName[vid.Name] = vid
-		c.ByPath[vid.Path] = vid
 	}
 	return nil
 }
 
+func (c *vmcli) newVID(pathname string) (*VID, error) {
+	//log.Printf("newVID %s\n", pathname)
+	vmxPath, err := PathNormalize(pathname)
+	if err != nil {
+		return nil, err
+	}
+	name, err := PathToName(vmxPath)
+	if err != nil {
+		return nil, err
+	}
+	vid := VID{
+		Name: name,
+		Path: vmxPath,
+		Id:   base64.StdEncoding.EncodeToString([]byte(vmxPath)),
+	}
+	current, ok := c.ById[vid.Id]
+	if ok {
+		return nil, fmt.Errorf("VM exits: '%+v'", *current)
+	}
+	c.ById[vid.Id] = &vid
+	c.ByName[vid.Name] = &vid
+	c.ByPath[vid.Path] = &vid
+	return &vid, nil
+}
+
 func (c *vmcli) Reset() {
-	c.ByPath = make(map[string]VID)
-	c.ByName = make(map[string]VID)
-	c.ById = make(map[string]VID)
+	c.ByPath = make(map[string]*VID)
+	c.ByName = make(map[string]*VID)
+	c.ById = make(map[string]*VID)
 }
 
 // search for a VM by Name or Id
@@ -503,4 +518,51 @@ func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 		return err
 	}
 	return nil
+}
+
+func (c *vmcli) Create(name, guestOS string) (*VM, error) {
+	if c.debug {
+		log.Printf("Create(%s, %s)\n", name, guestOS)
+	}
+
+	// make a VID, which will fail if the instance exists
+	vid, err := c.newVID(path.Join(c.v.Roots[0], name, name+".vmx"))
+	if err != nil {
+		return nil, err
+	}
+
+	guestFlag, guestValue, err := GuestOsParams(guestOS)
+	if err != nil {
+		return nil, err
+	}
+
+	// create a directory for the new instance
+	dir, _ := path.Split(vid.Path)
+	hostPath, err := PathFormat(c.v.Remote, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	mkdirCommand := "mkdir " + hostPath
+	_, err = c.v.RemoteExec(mkdirCommand, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// use vmcli to create the VM instance
+	command := fmt.Sprintf("vmcli VM Create -n %s -d %s %s %s", name, hostPath, guestFlag, guestValue)
+	olines, err := c.v.RemoteExec(command, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.v.verbose && len(olines) > 0 {
+		fmt.Printf("[%s] %s\n", name, olines[0])
+	}
+
+	vm, err := c.GetVM(name)
+	if err != nil {
+		return nil, err
+	}
+	return &vm, nil
 }

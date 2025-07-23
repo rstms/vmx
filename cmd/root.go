@@ -103,7 +103,9 @@ func init() {
 	OptionSwitch(rootCmd, "long", "l", "add output detail")
 
 	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
-	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for expected powerState after start/stop/kill")
+	OptionSwitch(rootCmd, "wait", "w", "wait for powerState after start/stop/kill")
+	OptionSwitch(rootCmd, "no-wait", "W", "do not wait for powerState after start/stop/kill")
+	OptionSwitch(rootCmd, "status", "", "output status after start/stop/kill")
 
 	OptionString(rootCmd, "iso", "", "", "CD/DVD ISO boot file or URL")
 	OptionString(rootCmd, "iso-ca", "", "", "CA for ISO URL download")

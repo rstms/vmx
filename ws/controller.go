@@ -82,7 +82,7 @@ const (
 )
 
 type Controller interface {
-	Create(string, CreateOptions, IsoOptions) (VM, error)
+	Create(string, CreateOptions, IsoOptions) (string, error)
 	Get(string) (VM, error)
 	Modify(string, CreateOptions, IsoOptions) (*[]string, error)
 	Start(string, StartOptions, IsoOptions) (string, error)
@@ -345,7 +345,7 @@ func (v *vmctl) Wait(vid, state string) error {
 	}
 
 	if v.verbose {
-		fmt.Printf("[%s] awaiting %s...\n", vid, state)
+		fmt.Printf("[%s] Awaiting power state: %s\n", vid, state)
 	}
 	start := time.Now()
 	interval_seconds := ViperGetInt64("interval")
@@ -378,14 +378,14 @@ func (v *vmctl) Wait(vid, state string) error {
 
 			if newState == state {
 				if v.verbose {
-					fmt.Printf("[%s] %s\n", vid, state)
+					fmt.Printf("[%s] Detected power %s\n", vid, state)
 				}
 				return nil
 			}
 		}
 		if timeout_seconds != 0 {
 			if time.Since(start) > timeout {
-				return fmt.Errorf("[%s] timed out awaiting power state %s", vid, state)
+				return fmt.Errorf("[%s] Timed out awaiting power state %s", vid, state)
 			}
 		}
 		time.Sleep(interval)

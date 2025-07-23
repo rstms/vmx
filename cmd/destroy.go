@@ -62,7 +62,7 @@ to quickly create a Cobra application.`,
 			err := vmx.Destroy(vm.Id, options)
 			cobra.CheckErr(err)
 
-			if OutputJSON {
+			if OutputJSON && ViperGetBool("status") {
 				// we can't call OutputInstanceState, so build the status here
 				status := ws.VMState{Name: vm.Name, Id: vm.Id, Result: "vm_destroyed"}
 				fmt.Println(FormatJSON(&status))

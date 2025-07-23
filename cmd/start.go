@@ -79,7 +79,7 @@ to quickly create a Cobra application.`,
 
 		result, err := vmx.Start(vid, options, *isoOptions)
 		cobra.CheckErr(err)
-		if OutputJSON {
+		if OutputJSON && ViperGetBool("status") {
 			OutputInstanceState(vid, result)
 		}
 	},

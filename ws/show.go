@@ -15,7 +15,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		log.Printf("Show(%s, %+v)\n", name, options)
 	}
 
-	vids := []VID{}
+	vids := []*VID{}
 
 	if name == "" && options.Running {
 		// we only need the running vms, so spoof vids with only the Name using vmrun output
@@ -29,7 +29,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 				if err != nil {
 					return []VM{}, err
 				}
-				vids = append(vids, VID{Name: runningName})
+				vids = append(vids, &VID{Name: runningName})
 			}
 		}
 	} else {
@@ -41,7 +41,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		vids = v
 	}
 
-	selected := []VID{}
+	selected := []*VID{}
 	for _, vid := range vids {
 		if name == "" || (strings.ToLower(name) == strings.ToLower(vid.Name)) {
 			selected = append(selected, vid)

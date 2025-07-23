@@ -18,7 +18,6 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		}
 		log.Printf("IsoOptions: %s\n", out)
 	}
-	actions := []string{}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
 		return nil, err
@@ -40,18 +39,7 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 		return nil, err
 	}
 
-	if options.ModifyNIC {
-		action, err := vmx.SetEthernet(options.MacAddress)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
 	if isoOptions.ModifyISO {
-		if v.debug {
-			log.Printf("ModifyISO: options.IsoFile=%s v.IsoPath=%s\n", isoOptions.IsoFile, v.IsoPath)
-		}
 		if isoOptions.IsoFile != "" {
 			err := v.CheckISODownload(&vm, &isoOptions)
 			if err != nil {
@@ -63,60 +51,9 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 			}
 			isoOptions.IsoFile = formatted
 		}
-		action, err := vmx.SetISO(&isoOptions)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
 	}
 
-	if options.ModifyTTY {
-		if v.debug {
-			log.Printf("ModifyTTY: pipe=%s client=%v v2v=%v\n", options.SerialPipe, options.SerialClient, options.SerialV2V)
-		}
-		action, err := vmx.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
-	if options.ModifyVNC {
-		action, err := vmx.SetVNC(options.VNCEnabled, options.VNCPort)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
-	if options.ModifyEFI {
-		action, err := vmx.SetEFI(options.EFIBoot)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
-	if options.ModifyClipboard {
-		action, err := vmx.SetClipboard(options.ClipboardEnabled)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
-	if options.ModifyShare {
-		if v.debug {
-			log.Printf("ModifyShare: enabled=%v host=%s guest=%s\n", options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
-		}
-		action, err := vmx.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
-		if err != nil {
-			return nil, err
-		}
-		actions = append(actions, action)
-	}
-
-	// FIXME: add unimplemented options.ModifyXXXXX from CreateOptions
+	actions, err := vmx.Configure(&options, &isoOptions)
 
 	editedData, err := vmx.Read()
 	if err != nil {
@@ -126,5 +63,6 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 	if err != nil {
 		return nil, err
 	}
+
 	return &actions, nil
 }

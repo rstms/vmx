@@ -8,10 +8,20 @@ import (
 )
 
 type CreateOptions struct {
-	GuestOS    string
-	CpuCount   int
-	MemorySize string
+	ModifyName bool
+	Name       string
 
+	ModifyGuestOS bool
+	GuestOS       string
+
+	ModifyCpu bool
+	CpuCount  int
+
+	ModifyMemory bool
+	MemorySize   string
+
+	ModifyDisk       bool
+	DiskName         string
 	DiskSize         string
 	DiskPreallocated bool
 	DiskSingleFile   bool
@@ -45,6 +55,8 @@ type CreateOptions struct {
 	ModifyEFI bool
 	EFIBoot   bool
 
+	ModifyFloppy bool
+
 	Wait bool
 }
 
@@ -55,17 +67,28 @@ type DestroyOptions struct {
 
 func NewCreateOptions() *CreateOptions {
 	return &CreateOptions{
-		CpuCount:   1,
-		MemorySize: "1G",
-		DiskSize:   "16G",
-		GuestOS:    "other",
-		MacAddress: "auto",
-		VNCPort:    5900,
+		ModifyName:      true,
+		ModifyCpu:       true,
+		CpuCount:        1,
+		ModifyMemory:    true,
+		MemorySize:      "1G",
+		ModifyDisk:      true,
+		DiskSize:        "16G",
+		ModifyEFI:       true,
+		ModifyTimeSync:  true,
+		ModifyTimeZone:  true,
+		GuestTimeZone:   "UTC",
+		ModifyGuestOS:   true,
+		GuestOS:         "other",
+		ModifyNIC:       true,
+		MacAddress:      "auto",
+		ModifyClipboard: true,
+		ModifyFloppy:    true,
+		VNCPort:         5900,
 	}
 }
 
-func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions) (VM, error) {
-	var vm VM
+func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions) (string, error) {
 
 	if v.debug {
 		log.Printf("Create(name='%s', options='%+v' isoOptions='%+v'\n", name, options, isoOptions)
@@ -74,111 +97,104 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	// check for existing instance
 	_, err := v.cli.GetVM(name)
 	if err == nil {
-		return vm, fmt.Errorf("create failed, instance '%s' exists", name)
+		return "", fmt.Errorf("create failed, instance '%s' exists", name)
 	}
 
-	// display create options
+	// log create options
+	ostr, err := FormatJSON(&options)
+	if err != nil {
+		return "", err
+	}
+	log.Printf("create: %s\n%s\n", name, ostr)
+
+	vm, err := v.cli.Create(name, options.GuestOS)
+	if err != nil {
+		return "", err
+	}
+
+	err = v.CreateDisk(vm, options)
+	if err != nil {
+		return "", err
+	}
+
+	options.Name = vm.Name
+	options.DiskName = vm.Name + ".vmdk"
+
+	actions, err := v.Modify(vm.Name, options, isoOptions)
+	if err != nil {
+		return "", err
+	}
+
 	if v.verbose {
-		ostr, err := FormatJSON(&options)
-		if err != nil {
-			return vm, err
+		for _, action := range *actions {
+			fmt.Printf("[%s] %s\n", vm.Name, action)
 		}
-		fmt.Printf("[%s] create options: %s\n", name, ostr)
-	}
-
-	vm.Name = name
-	normalized, err := PathNormalize(path.Join(v.Roots[0], name, name+".vmx"))
-	if err != nil {
-		return vm, err
-	}
-	vm.Path = normalized
-
-	// create instance directory
-	dir, _ := path.Split(vm.Path)
-	hostPath, err := PathFormat(v.Remote, dir)
-	if err != nil {
-		return vm, err
-	}
-	mkdirCommand := "mkdir " + hostPath
-	//log.Printf("create mkdir command: %s\n", mkdirCommand)
-	_, err = v.RemoteExec(mkdirCommand, nil)
-	if err != nil {
-		return vm, err
-	}
-
-	if isoOptions.IsoFile != "" {
-		isoPathname, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
-		if err != nil {
-			return vm, err
-		}
-		hostIsoPathname, err := PathnameFormat(v.Remote, isoPathname)
-		if err != nil {
-			return vm, err
-		}
-		isoOptions.IsoFile = hostIsoPathname
-	}
-
-	//fmt.Printf("Create: options.IsoFile=%s\n", options.IsoFile)
-
-	// write vmx file
-	vmx, err := GenerateVMX(v.Remote, name, &options, &isoOptions)
-	if err != nil {
-		return vm, err
-	}
-	data, err := vmx.Read()
-	if err != nil {
-		return vm, err
-	}
-	err = v.WriteHostFile(&vm, vm.Name+".vmx", data)
-	if err != nil {
-		return vm, err
-	}
-
-	// create vmdk disk
-	pcd, err := PathChdirCommand(v.Remote, hostPath)
-	if err != nil {
-		return vm, err
-	}
-	command := pcd
-
-	diskSize, err := SizeParse(options.DiskSize)
-	if err != nil {
-		return vm, err
-	}
-	diskSizeMB := int64(diskSize / MB)
-
-	//fmt.Printf("options.DiskSize: %s\n", options.DiskSize)
-	//fmt.Printf("diskSize: %d\n", diskSize)
-	//fmt.Printf("diskSizeMB: %d\n", diskSizeMB)
-
-	diskType := ParseDiskType(options.DiskSingleFile, options.DiskPreallocated)
-
-	command += fmt.Sprintf("vmware-vdiskmanager -c -s %dMB -a nvme -t %d %s.vmdk", diskSizeMB, diskType, name)
-
-	result, err := v.RemoteExec(command, nil)
-	if err != nil {
-		return vm, err
-	}
-	if v.verbose {
-		fmt.Printf("[%s] %s\n", name, result)
 	}
 
 	if options.Wait {
 		err := v.Wait(name, "off")
 		if err != nil {
-			return vm, err
+			return "", err
 		}
 		_, err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
 		if err != nil {
-			return vm, err
+			return "", err
 		}
 		_, err = v.Stop(name, StopOptions{Wait: true})
 		if err != nil {
-			return vm, err
+			return "", err
+		}
+		return "created", nil
+	}
+
+	return "create pending", nil
+}
+
+func (v *vmctl) CreateDisk(vm *VM, options CreateOptions) error {
+
+	vmDir, _ := path.Split(vm.Path)
+
+	hostDiskFile, err := PathFormat(v.Remote, path.Join(vmDir, vm.Name+".vmdk"))
+	if err != nil {
+		return err
+	}
+
+	// DANGER, WILL ROBINSON! - delete vmdk file created by 'vmcli VM Create'
+	var command string
+	switch v.Remote {
+	case "windows":
+		command = "del " + hostDiskFile
+	default:
+		command = "rm " + hostDiskFile
+	}
+
+	_, err = v.RemoteExec(command, nil)
+	if err != nil {
+		return err
+	}
+
+	diskSize, err := SizeParse(options.DiskSize)
+	if err != nil {
+		return err
+	}
+	diskSizeMB := int64(diskSize / MB)
+
+	diskType := ParseDiskType(options.DiskSingleFile, options.DiskPreallocated)
+
+	command = fmt.Sprintf("vmware-vdiskmanager -c -s %dMB -a nvme -t %d %s", diskSizeMB, diskType, hostDiskFile)
+
+	olines, err := v.RemoteExec(command, nil)
+	if err != nil {
+		return err
+	}
+	if v.verbose {
+		for _, line := range olines {
+			fmt.Printf("[%s] %s\n", vm.Name, line)
 		}
 	}
 
-	return vm, nil
+	return nil
+
 }
 
 func (v *vmctl) Destroy(vid string, options DestroyOptions) error {

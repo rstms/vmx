@@ -3,38 +3,9 @@ package ws
 import (
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"strings"
 )
-
-const vmxTemplate string = `.encoding = "UTF-8"
-config.version = "8"
-virtualHW.version = "19"
-displayName = "${displayName}"
-numvcpus = "${numvcpus}"
-memsize = "${memsize}"
-guestOS = "${guestOS}"
-pciBridge0.present = "TRUE"
-pciBridge4.functions = "8"
-pciBridge4.present = "TRUE"
-pciBridge4.virtualDev = "pcieRootPort"
-pciBridge5.functions = "8"
-pciBridge5.present = "TRUE"
-pciBridge5.virtualDev = "pcieRootPort"
-pciBridge6.functions = "8"
-pciBridge6.present = "TRUE"
-pciBridge6.virtualDev = "pcieRootPort"
-pciBridge7.functions = "8"
-pciBridge7.present = "TRUE"
-pciBridge7.virtualDev = "pcieRootPort"
-nvme0.present = "TRUE"
-nvme0:0.fileName = "${VMDKFile}"
-nvme0:0.present = "TRUE"
-floppy0.present = "FALSE"
-ide1:0.present = "FALSE"
-ethernet0.present = "FALSE"
-`
 
 var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
@@ -79,21 +50,6 @@ func newVMX(os, name string) VMX {
 	return vmx
 }
 
-func GenerateVMX(os, name string, options *CreateOptions, isoOptions *IsoOptions) (*VMX, error) {
-
-	vmx := newVMX(os, name)
-	actions, err := vmx.Generate(options, isoOptions)
-	if err != nil {
-		return nil, err
-	}
-	if vmx.verbose {
-		for _, action := range actions {
-			log.Printf("[%s] %s\n", vmx.name, action)
-		}
-	}
-	return &vmx, nil
-}
-
 func InitVMX(os, name string, data []byte) (*VMX, error) {
 	vmx := newVMX(os, name)
 	err := vmx.Write(data)
@@ -103,7 +59,7 @@ func InitVMX(os, name string, data []byte) (*VMX, error) {
 	return &vmx, nil
 }
 
-func guestOsParams(key string) (string, string, error) {
+func GuestOsParams(key string) (string, string, error) {
 	flag := "-g"
 	guest := strings.TrimSpace(key)
 	_, ok := VMGuestOSValues[guest]
@@ -117,100 +73,129 @@ func guestOsParams(key string) (string, string, error) {
 	return flag, guest, nil
 }
 
-func (v *VMX) InitializeFromTemplate(options *CreateOptions, isoOptions *IsoOptions) error {
-
-	v.macros = make(map[string]string)
-	v.macros["displayName"] = v.name
-	v.macros["numvcpus"] = fmt.Sprintf("%d", options.CpuCount)
-	size, err := SizeParse(options.MemorySize)
-	if err != nil {
-		return err
-	}
-	v.macros["memsize"] = fmt.Sprintf("%d", size/MB)
-	_, osName, err := guestOsParams(options.GuestOS)
-	if err != nil {
-		return err
-	}
-	v.macros["guestOS"] = osName
-	v.macros["VMDKfile"] = v.name + ".vmdk"
-
-	content := os.Expand(vmxTemplate, v.GetConfig)
-
-	err = v.Write([]byte(content))
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (v *VMX) Generate(options *CreateOptions, isoOptions *IsoOptions) ([]string, error) {
+func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]string, error) {
 
 	actions := []string{}
 
-	// TODO: use vmcli to generate initial VMX file instead of template
-	err := v.InitializeFromTemplate(options, isoOptions)
-	if err != nil {
-		return actions, err
+	if options == nil {
+		return actions, fmt.Errorf("missing CreateOptions")
+	}
+	if isoOptions == nil {
+		return actions, fmt.Errorf("missing IsoOptions")
 	}
 
-	action, err := v.SetEFI(options.EFIBoot)
-	if err != nil {
-		return actions, err
-	}
-	actions = append(actions, action)
-
-	action, err = v.SetFloppy(false)
-	if err != nil {
-		return actions, err
-	}
-	actions = append(actions, action)
-
-	if isoOptions != nil {
-		action, err = v.SetISO(isoOptions)
+	if options.ModifyName {
+		action, err := v.SetName(options.Name)
 		if err != nil {
 			return actions, err
 		}
+		actions = append(actions, action)
 	}
-	action, err = v.SetEthernet(options.MacAddress)
-	if err != nil {
-		return actions, err
-	}
-	actions = append(actions, action)
 
-	action, err = v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
-	if err != nil {
-		return actions, err
+	if options.ModifyCpu {
+		action, err := v.SetCpu(options.CpuCount)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
 	}
-	actions = append(actions, action)
-	action, err = v.SetVNC(options.VNCEnabled, options.VNCPort)
-	if err != nil {
-		return actions, err
-	}
-	actions = append(actions, action)
 
-	action, err = v.SetClipboard(options.ClipboardEnabled)
-	if err != nil {
-		return actions, err
-	}
-	actions = append(actions, action)
+	if options.ModifyMemory {
+		action, err := v.SetMemory(options.MemorySize)
 
-	action, err = v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
-	if err != nil {
-		return actions, err
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
 	}
-	actions = append(actions, action)
 
-	action, err = v.SetTimeSync(options.HostTimeSync)
-	if err != nil {
-		return actions, err
+	if options.ModifyDisk {
+		action, err := v.SetDisk(options.DiskName)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
 	}
-	actions = append(actions, action)
 
-	action, err = v.SetGuestTimeZone(options.GuestTimeZone)
-	if err != nil {
-		return actions, err
+	if options.ModifyFloppy {
+		action, err := v.SetFloppy(false)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
 	}
-	actions = append(actions, action)
+
+	if options.ModifyEFI {
+		action, err := v.SetEFI(options.EFIBoot)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if isoOptions.ModifyISO {
+		action, err := v.SetISO(isoOptions)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyNIC {
+		action, err := v.SetEthernet(options.MacAddress)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyTTY {
+		action, err := v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyVNC {
+		action, err := v.SetVNC(options.VNCEnabled, options.VNCPort)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyClipboard {
+		action, err := v.SetClipboard(options.ClipboardEnabled)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyShare {
+		action, err := v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyTimeSync {
+		action, err := v.SetTimeSync(options.HostTimeSync)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyTimeZone {
+		action, err := v.SetGuestTimeZone(options.GuestTimeZone)
+		if err != nil {
+			return actions, err
+		}
+		actions = append(actions, action)
+	}
 
 	return actions, nil
 }
@@ -263,6 +248,55 @@ func (v *VMX) addLine(line string) {
 	v.lines = append(v.lines, line)
 }
 
+func (v *VMX) SetName(name string) (string, error) {
+	if v.debug {
+		log.Printf("SetName(%s)\n", name)
+	}
+	v.removePrefix("displayName ")
+	v.addLine(fmt.Sprintf(`displayName = "%s"`, name))
+	return "Set display name " + name, nil
+}
+
+func (v *VMX) SetCpu(cpuCount int) (string, error) {
+	if v.debug {
+		log.Printf("SetCpuCount(%d)\n", cpuCount)
+	}
+	v.removePrefix("numvcpus ")
+	v.addLine(fmt.Sprintf(`numvcpus = "%d"`, cpuCount))
+
+	return fmt.Sprintf("Set cpu count %d", cpuCount), nil
+}
+
+func (v *VMX) SetMemory(memorySize string) (string, error) {
+	if v.debug {
+		log.Printf("SetMemory(%s)\n", memorySize)
+	}
+	v.removePrefix("memsize =")
+	v.removePrefix("memory.maxsize =")
+	size, err := SizeParse(memorySize)
+	if err != nil {
+		return "", err
+	}
+	v.addLine(fmt.Sprintf(`memsize = "%d"`, size/MB))
+
+	return fmt.Sprintf("Set memory size %s", FormatSize(size)), nil
+}
+
+func (v *VMX) SetDisk(diskName string) (string, error) {
+	if v.debug {
+		log.Printf("SetDisk(%s)\n", diskName)
+	}
+	action := "Removed NVME disk"
+	v.removePrefix("nvme0")
+	if diskName != "" {
+		v.addLine(`nvme0.present = "TRUE"`)
+		v.addLine(fmt.Sprintf(`nvme0:0.fileName = "%s"`, diskName))
+		v.addLine(`nvme0:0.present = "TRUE"`)
+		action = "Set NVME disk " + diskName
+	}
+	return action, nil
+}
+
 func (v *VMX) SetFloppy(enabled bool) (string, error) {
 	if v.debug {
 		log.Printf("SetFloppy(%v)\n", enabled)
@@ -272,7 +306,7 @@ func (v *VMX) SetFloppy(enabled bool) (string, error) {
 		return "", fmt.Errorf("unsupported: floppy enable: '%v'", enabled)
 	}
 	v.lines = append(v.lines, `floppy0.present = "FALSE"`)
-	return "disabled floppy device", nil
+	return "Disabled floppy device", nil
 }
 
 func (v *VMX) SetGuestTimeZone(zone string) (string, error) {
@@ -281,10 +315,10 @@ func (v *VMX) SetGuestTimeZone(zone string) (string, error) {
 	}
 	v.removePrefix("guestTimeZone")
 	if zone == "" {
-		return "removed guest time zone", nil
+		return "Removed guest time zone", nil
 	}
 	v.lines = append(v.lines, fmt.Sprintf(`guestTimeZone = "%s"`, zone))
-	return fmt.Sprintf("set guest time zone: '%s'", zone), nil
+	return fmt.Sprintf("Set guest time zone: '%s'", zone), nil
 }
 
 func (v *VMX) SetEFI(efi bool) (string, error) {
@@ -293,10 +327,10 @@ func (v *VMX) SetEFI(efi bool) (string, error) {
 	}
 	v.removePrefix("firmware =")
 	if efi {
-		v.lines = append(v.lines, `firmware = "efi"`)
-		return "set boot firmware: 'EFI'", nil
+		v.addLine(`firmware = "efi"`)
+		return "Set EFI firmware", nil
 	}
-	return "set boot firmware: 'BIOS'", nil
+	return "Set BIOS firmware", nil
 }
 
 func (v *VMX) SetISO(options *IsoOptions) (string, error) {
@@ -322,7 +356,7 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 	v.removePrefix("ide1:0.")
 	if !options.IsoPresent {
 		v.addLine(`ide1:0.present = "FALSE"`)
-		return "removed CD/DVD ISO", nil
+		return "Removed boot ISO", nil
 	}
 	v.addLine(`ide1:0.present = "TRUE"`)
 	v.addLine(`ide1:0.deviceType = "cdrom-image"`)
@@ -344,7 +378,7 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 		v.addLine(`ide1:0.startConnected = "FALSE"`)
 		atBoot = "disconnected"
 	}
-	return fmt.Sprintf("set CD/DVD ISO (%s at boot): '%s'", atBoot, normalized), nil
+	return fmt.Sprintf("Set boot ISO '%s' [%s]", normalized, atBoot), nil
 }
 
 // FIXME: more NIC options could be modified
@@ -355,20 +389,20 @@ func (v *VMX) SetEthernet(mac string) (string, error) {
 	v.removePrefix("ethernet0.")
 	if mac == "" {
 		v.addLine(`ethernet0.present = "FALSE"`)
-		return "removed ethernet device", nil
+		return "Removed ethernet device", nil
 	}
 
 	v.addLine(`ethernet0.present = "TRUE"`)
 	v.addLine(`ethernet0.virtualDev = "e1000"`)
 	if mac == "auto" {
 		v.addLine(`ethernet0.addressType = "generated"`)
-		return "set auto-generated MAC address", nil
+		return "Set auto-generated MAC address", nil
 	}
 
 	if MAC_PATTERN.MatchString(mac) {
 		v.addLine(`ethernet0.address = "` + mac + `"`)
 		v.addLine(`ethernet0.addressType = "static"`)
-		return fmt.Sprintf("set MAC address: %s", mac), nil
+		return fmt.Sprintf("Set MAC address: %s", mac), nil
 	}
 
 	return "", fmt.Errorf("invalid MAC address: '%s'", mac)
@@ -382,7 +416,7 @@ func (v *VMX) SetSerial(pipe string, isClient, isV2V bool) (string, error) {
 	v.removePrefix("serial0.")
 	if pipe == "" {
 		v.addLine(`serial0.present = "FALSE"`)
-		return "removed serial device", nil
+		return "Removed serial device", nil
 	}
 
 	v.addLine(`serial0.present = "TRUE"`)
@@ -430,7 +464,7 @@ func (v *VMX) SetSerial(pipe string, isClient, isV2V bool) (string, error) {
 		ttyEnd = "client"
 	}
 
-	return fmt.Sprintf("set tty %s %s pipe %s", ttyMode, ttyEnd, hostPipe), nil
+	return fmt.Sprintf("Set tty %s %s pipe %s", ttyMode, ttyEnd, hostPipe), nil
 }
 
 // fixme: VNC password
@@ -441,13 +475,13 @@ func (v *VMX) SetVNC(enabled bool, port int) (string, error) {
 	v.removePrefix("RemoteDisplay.vnc.")
 	if !enabled {
 		v.addLine(`RemoteDisplay.vnc.enabled = "FALSE"`)
-		return "disabled VNC", nil
+		return "Disabled VNC", nil
 	}
 	v.addLine(`RemoteDisplay.vnc.enabled = "TRUE"`)
 	if port != 5900 {
 		v.addLine(fmt.Sprintf(`RemoteDisplay.vnc.port = "%d"`, port))
 	}
-	return fmt.Sprintf("enabled VNC on port %d", port), nil
+	return fmt.Sprintf("Enabled VNC on port %d", port), nil
 }
 
 func (v *VMX) SetClipboard(enable bool) (string, error) {
@@ -459,10 +493,10 @@ func (v *VMX) SetClipboard(enable bool) (string, error) {
 	v.removePrefix("isolation.tools.dnd")
 
 	value := "TRUE"
-	action := "disabled clipboard"
+	action := "Disabled clipboard"
 	if enable {
 		value = "FALSE"
-		action = "enabled clipboard"
+		action = "Enabled clipboard"
 	}
 	v.addLine(fmt.Sprintf(`isolation.tools.copy.disable = "%s"`, value))
 	v.addLine(fmt.Sprintf(`isolation.tools.paste.disable = "%s"`, value))
@@ -490,7 +524,7 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 	v.removePrefix("isolation.tools.hgfs.")
 	if !enable {
 		v.addLine(`isolation.tools.hgfs.disable = "TRUE"`)
-		return "disabled filesystem share", nil
+		return "Disabled filesystem share", nil
 	}
 
 	formatted, err := PathnameFormat(v.hostOS, hostPath)
@@ -516,7 +550,7 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 	v.addLine(fmt.Sprintf(`sharedFolder0.hostPath = "%s"`, hostPath))
 	v.addLine(`sharedFolder0.expiration = "never"`)
 	v.addLine(`sharedFolder0.maxNum = "1"`)
-	return fmt.Sprintf("enabled filesystem share: host=%s guest=%s", hostPath, guestPath), nil
+	return fmt.Sprintf("Enabled filesystem share: host=%s guest=%s", hostPath, guestPath), nil
 }
 
 func (v *VMX) SetTimeSync(enable bool) (string, error) {
@@ -528,7 +562,7 @@ func (v *VMX) SetTimeSync(enable bool) (string, error) {
 	v.removePrefix("time.synchronize")
 	if !enable {
 		v.addLine(`tools.syncTime = "FALSE"`)
-		return "disabled host time sync", nil
+		return "Disabled host time sync", nil
 	}
 	v.addLine(`tools.syncTime = "TRUE"`)
 	v.addLine(`time.synchronize.continue = "TRUE"`)
@@ -536,5 +570,5 @@ func (v *VMX) SetTimeSync(enable bool) (string, error) {
 	v.addLine(`time.synchronize.resume.disk = "TRUE"`)
 	v.addLine(`time.synchronize.shrink = "TRUE"`)
 	v.addLine(`time.synchronize.tools.startup = "TRUE"`)
-	return "enabled host time sync", nil
+	return "Enabled host time sync", nil
 }

@@ -64,24 +64,24 @@ unless specified with option flags.
 
 		switch {
 		case ViperGetBool("openbsd"):
-			options.GuestOS = "openbsd"
+			options.GuestOS = "openbsd-64"
 		case ViperGetBool("debian"):
-			options.GuestOS = "debian"
+			options.GuestOS = "debian12-64"
 		case ViperGetBool("windows"):
-			options.GuestOS = "windows"
+			options.GuestOS = "windows11-64"
 		case ViperGetBool("ubuntu"):
-			options.GuestOS = "ubuntu"
+			options.GuestOS = "ubuntu-64"
 		default:
-			options.GuestOS = "other"
+			options.GuestOS = "other-64"
 		}
 
 		isoOptions, err := InitIsoOptions()
 		cobra.CheckErr(err)
 
-		vm, err := vmx.Create(name, *options, *isoOptions)
+		result, err := vmx.Create(name, *options, *isoOptions)
 		cobra.CheckErr(err)
-		if OutputJSON && options.Wait {
-			OutputInstanceState(vm.Name, "vm_created")
+		if OutputJSON && options.Wait && ViperGetBool("status") {
+			OutputInstanceState(name, result)
 		}
 	},
 }

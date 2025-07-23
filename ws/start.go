@@ -117,7 +117,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 	}
 
 	if v.verbose {
-		fmt.Printf("[%s] requesting %s start...\n", vm.Name, visibility)
+		fmt.Printf("[%s] Requesting %s start\n", vm.Name, visibility)
 	}
 
 	err = v.RemoteSpawn(command, nil)
@@ -125,7 +125,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		return "", err
 	}
 	if v.verbose {
-		fmt.Printf("[%s] start request complete\n", vm.Name)
+		fmt.Printf("[%s] Start request complete\n", vm.Name)
 	}
 
 	if options.Wait {
@@ -136,7 +136,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 
 		if isoOptions.ModifyISO {
 			if savedBootConnected != isoOptions.IsoBootConnected {
-				msg := fmt.Sprintf("[%s] restoring ISO boot connected: %v\n", vm.Name, savedBootConnected)
+				msg := fmt.Sprintf("[%s] Restoring ISO boot-connected: %v\n", vm.Name, savedBootConnected)
 				if v.verbose {
 					fmt.Println(msg)
 				}
@@ -180,7 +180,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 		action = "forced power down"
 	}
 	if v.verbose {
-		fmt.Printf("[%s] requesting %s...\n", vm.Name, action)
+		fmt.Printf("[%s] Requesting %s\n", vm.Name, action)
 	}
 
 	_, err = v.RemoteExec(command, nil)
