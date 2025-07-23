@@ -50,12 +50,7 @@ Write the content of the instance's VMX file to stdout
 		content, err := vmx.GetProperty(vid, "vmx")
 		cobra.CheckErr(err)
 		content = strings.TrimSpace(content)
-		if OutputJSON {
-			lines := strings.Split(content, "\n")
-			fmt.Println(FormatJSON(lines))
-		} else {
-			fmt.Println(content)
-		}
+		fmt.Println(content)
 	},
 }
 

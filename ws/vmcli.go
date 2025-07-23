@@ -191,7 +191,7 @@ func (c *vmcli) GetConfig(vm *VM) error {
 	if err != nil {
 		return err
 	}
-	vm.IsoFile, err = c.GetPath(config, "ide1:0.filename", false)
+	vm.IsoFile, err = c.GetPath(config, "ide1:0.fileName", false)
 	if err != nil {
 		return err
 	}
