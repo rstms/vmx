@@ -555,7 +555,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
 		err := v.cli.GetConfig(vm)
 		if err != nil {
-		    return err
+			return err
 		}
 		_, _, err = v.getDisks(vm)
 		if err != nil {
