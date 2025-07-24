@@ -131,7 +131,7 @@ func InitController() {
 }
 
 func OutputInstanceState(vid, result string) {
-	state, err := vmx.GetStatus(vid)
+	state, err := vmx.GetState(vid)
 	cobra.CheckErr(err)
 	state.Result = result
 	fmt.Println(FormatJSON(&state))

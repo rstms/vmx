@@ -10,7 +10,7 @@ type ShowOptions struct {
 	Detail  bool
 }
 
-func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
+func (v *vmctl) Show(name string, options ShowOptions) (*[]VMState, error) {
 	if v.debug {
 		log.Printf("Show(%s, %+v)\n", name, options)
 	}
@@ -21,13 +21,13 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		// we only need the running vms, so spoof vids with only the Name using vmrun output
 		olines, err := v.RemoteExec("vmrun list", nil)
 		if err != nil {
-			return []VM{}, err
+			return nil, err
 		}
 		for _, line := range olines {
 			if !strings.HasPrefix(line, "Total running VMs:") {
 				runningName, err := PathToName(line)
 				if err != nil {
-					return []VM{}, err
+					return nil, err
 				}
 				vids = append(vids, &VID{Name: runningName})
 			}
@@ -36,7 +36,7 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		// set vids from API
 		v, err := v.cli.GetVIDs()
 		if err != nil {
-			return []VM{}, err
+			return nil, err
 		}
 		vids = v
 	}
@@ -48,21 +48,17 @@ func (v *vmctl) Show(name string, options ShowOptions) ([]VM, error) {
 		}
 	}
 
-	vms := make([]VM, len(selected))
+	vms := make([]VMState, len(selected))
 	for i, vid := range selected {
 		if options.Detail {
-			vm, err := v.cli.GetVM(vid.Name)
+			state, err := v.GetState(vid.Name)
 			if err != nil {
-				return []VM{}, err
+				return nil, err
 			}
-			err = v.queryVM(&vm, QueryTypeAll)
-			if err != nil {
-				return []VM{}, err
-			}
-			vms[i] = vm
+			vms[i] = *state
 		} else {
-			vms[i] = VM{Name: vid.Name}
+			vms[i] = VMState{Name: vid.Name}
 		}
 	}
-	return vms, nil
+	return &vms, nil
 }

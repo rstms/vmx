@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const debug = true
+const debug = false
 
 const ALLOW_ABSOLUTE_ISO_PATH = false
 

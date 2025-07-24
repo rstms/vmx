@@ -79,7 +79,14 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 				if err != nil {
 					return err
 				}
-				files[path.Join(vmPath, normalDir, normalDir+".vmx")] = true
+				vmxFile := path.Join(vmPath, normalDir, normalDir+".vmx")
+				exists, err := c.windowsFileExists(vmxFile)
+				if err != nil {
+					return err
+				}
+				if exists {
+					files[path.Join(vmPath, normalDir, normalDir+".vmx")] = true
+				}
 			}
 		}
 	default:
@@ -99,6 +106,23 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		}
 	}
 	return nil
+}
+
+func (c *vmcli) windowsFileExists(pathname string) (bool, error) {
+	hostPath, err := PathFormat(c.v.Remote, pathname)
+	if err != nil {
+		return false, err
+	}
+	var exitCode int
+	_, err = c.v.RemoteExec("dir >NUL 2>NUL "+hostPath, &exitCode)
+	if err != nil {
+		return false, err
+	}
+	if exitCode == 0 {
+		return true, nil
+	}
+	log.Printf("WARNING: not found: '%s'\n", pathname)
+	return false, nil
 }
 
 func (c *vmcli) newVID(pathname string) (*VID, error) {
@@ -286,6 +310,9 @@ func (c *vmcli) SetParam(vm *VM, name, value string) error {
 }
 
 func (c *vmcli) QueryPowerState(vm *VM) error {
+	if c.debug {
+		fmt.Printf("QueryPowerState(%s)\n", vm.Name)
+	}
 	var state struct{ PowerState string }
 	err := c.exec(vm, "power query -f json", &state)
 	if err != nil {
@@ -297,9 +324,15 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 }
 
 func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
+	if c.debug {
+		fmt.Printf("GetParams(%s)\n", vm.Name)
+	}
 	var params VMConfig
 	err := c.exec(vm, "configParams query -f json", &params)
 	if err != nil {
+		if checkEncryptedError(vm, err) {
+			return &VMConfig{}, nil
+		}
 		return nil, err
 	}
 	return &params, nil

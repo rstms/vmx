@@ -65,8 +65,22 @@ long listing.
 		}
 		lines, err := vmx.Files(vid, options)
 		cobra.CheckErr(err)
-		if OutputJSON && !options.Detail {
-			fmt.Println(FormatJSON(lines))
+		if OutputJSON {
+			result := make(map[string]any)
+			var label string
+			if options.Detail {
+				label = "directory_listings"
+				if options.All {
+					label = "all_directory_listings"
+				}
+			} else {
+				label = "vmx_files"
+				if options.All {
+					label = "all_files"
+				}
+			}
+			result[label] = lines
+			fmt.Println(FormatJSON(result))
 		} else {
 			for _, line := range lines {
 				fmt.Println(line)

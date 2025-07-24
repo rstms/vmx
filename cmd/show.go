@@ -57,21 +57,28 @@ Display VM instance data
 		}
 		vms, err := vmx.Show(vid, options)
 		cobra.CheckErr(err)
+		result := make(map[string]any)
+		running := "all_"
+		if options.Running {
+			running = "running_"
+		}
 		if options.Detail {
-			fmt.Println(FormatJSON(vms))
+			result[running+"instance_status"] = vms
 		} else {
-			names := make([]string, len(vms))
-			for i, vm := range vms {
+			names := make([]string, len(*vms))
+			for i, vm := range *vms {
 				if OutputJSON {
 					names[i] = vm.Name
 				} else {
 					fmt.Println(vm.Name)
 				}
 			}
-			if OutputJSON {
-				fmt.Println(FormatJSON(names))
+			if !OutputJSON {
+				return
 			}
+			result[running+"instance_names"] = names
 		}
+		fmt.Println(FormatJSON(result))
 	},
 }
 

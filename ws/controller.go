@@ -15,6 +15,8 @@ import (
 const Version = "0.1.1"
 
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
+var ENCRYPTED_VM_ERROR = regexp.MustCompile(`Something went wrong while getting password from stdin`)
+var NONEXISTENT_VM_ERROR = regexp.MustCompile(`VMX : '[^']*' does not exist!`)
 
 type VID struct {
 	Id   string
@@ -64,6 +66,7 @@ type VM struct {
 
 	Running    bool
 	PowerState string
+	Encrypted  bool
 }
 
 type QueryType int
@@ -88,7 +91,7 @@ type Controller interface {
 	Start(string, StartOptions, IsoOptions) (string, error)
 	Stop(string, StopOptions) (string, error)
 	Destroy(string, DestroyOptions) error
-	Show(string, ShowOptions) ([]VM, error)
+	Show(string, ShowOptions) (*[]VMState, error)
 	GetProperty(string, string) (string, error)
 	SetProperty(string, string, string) error
 	Upload(string, string, string) error
@@ -97,7 +100,7 @@ type Controller interface {
 	Wait(string, string) error
 	SendKeys(string, string) error
 	Close() error
-	GetStatus(string) (*VMState, error)
+	GetState(string) (*VMState, error)
 }
 
 type vmctl struct {
@@ -362,7 +365,7 @@ func (v *vmctl) Wait(vid, state string) error {
 			if err != nil {
 				return err
 			}
-			for _, vm := range vms {
+			for _, vm := range *vms {
 				if vm.Name == vid {
 					// set checkPower after the next sleep
 					running = true
@@ -406,7 +409,7 @@ func (v *vmctl) Get(vid string) (VM, error) {
 	return vm, nil
 }
 
-func (v *vmctl) GetStatus(vid string) (*VMState, error) {
+func (v *vmctl) GetState(vid string) (*VMState, error) {
 
 	vm, err := v.Get(vid)
 	if err != nil {
@@ -493,8 +496,8 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 		}
 		return vm.MacAddress, nil
 
-	case "state", "status":
-		state, err := v.GetStatus(vid)
+	case "state":
+		state, err := v.GetState(vid)
 		if err != nil {
 			return "", err
 		}
@@ -552,7 +555,7 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
 		err := v.cli.GetConfig(vm)
 		if err != nil {
-			return err
+		    return err
 		}
 		_, _, err = v.getDisks(vm)
 		if err != nil {
@@ -562,6 +565,10 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 	if queryType == QueryTypeState || queryType == QueryTypeAll {
 		err := v.cli.QueryPowerState(vm)
 		if err != nil {
+			if checkEncryptedError(vm, err) {
+				vm.Encrypted = true
+				return nil
+			}
 			return err
 		}
 		err = v.cli.GetMacAddress(vm, nil)
@@ -780,4 +787,13 @@ func (v *vmctl) getDisks(vm *VM) ([]VMDisk, bool, error) {
 		fmt.Printf("[%s] WARNING: no vmdk disks detected in vmx file", vm.Name)
 	}
 	return disks, found, nil
+}
+
+func checkEncryptedError(vm *VM, err error) bool {
+	if ENCRYPTED_VM_ERROR.MatchString(fmt.Sprintf("%v", err)) {
+		log.Printf("WARNING: %s is encrypted\n", vm.Name)
+		vm.Encrypted = true
+		return true
+	}
+	return false
 }
