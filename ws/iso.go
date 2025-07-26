@@ -92,8 +92,8 @@ func (v *vmctl) downloadISO(vm *VM, url, cert, key, ca string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		cert_flag := ViperGetString("iso_download.cert_flag")
-		key_flag := ViperGetString("iso_download.key_flag")
+		cert_flag := ViperGetString("iso_download.client_cert_flag")
+		key_flag := ViperGetString("iso_download.client_key_flag")
 		command += fmt.Sprintf(" %s %s %s %s", cert_flag, hostCert, key_flag, hostKey)
 	}
 
