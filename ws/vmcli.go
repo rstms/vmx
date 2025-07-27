@@ -44,6 +44,29 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 	return nil
 }
 
+func (c *vmcli) execCommand(name, command string, lines int) error {
+	if c.v.debug {
+		fmt.Printf("[%s] %s\n", name, command)
+	}
+	olines, err := c.v.RemoteExec(command, nil)
+	if err != nil {
+		return err
+	}
+	var count int
+	if c.v.verbose && len(olines) > 0 {
+		for _, line := range olines {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				if lines == 0 || count < lines {
+					fmt.Printf("[%s] %s\n", name, line)
+				}
+				count += 1
+			}
+		}
+	}
+	return nil
+}
+
 func (c *vmcli) GetVIDs() ([]*VID, error) {
 	c.Reset()
 	vids := []*VID{}
@@ -311,7 +334,7 @@ func (c *vmcli) SetParam(vm *VM, name, value string) error {
 
 func (c *vmcli) QueryPowerState(vm *VM) error {
 	if c.debug {
-		fmt.Printf("QueryPowerState(%s)\n", vm.Name)
+		fmt.Printf("[%s] QueryPowerState\n", vm.Name)
 	}
 	var state struct{ PowerState string }
 	err := c.exec(vm, "power query -f json", &state)
@@ -325,7 +348,7 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 
 func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 	if c.debug {
-		fmt.Printf("GetParams(%s)\n", vm.Name)
+		fmt.Printf("[%s] GetParams\n", vm.Name)
 	}
 	var params VMConfig
 	err := c.exec(vm, "configParams query -f json", &params)
@@ -583,14 +606,9 @@ func (c *vmcli) Create(name, guestOS string) (*VM, error) {
 	}
 
 	// use vmcli to create the VM instance
-	command := fmt.Sprintf("vmcli VM Create -n %s -d %s %s %s", name, hostPath, guestFlag, guestValue)
-	olines, err := c.v.RemoteExec(command, nil)
+	err = c.execCommand(name, fmt.Sprintf("vmcli VM Create -n %s -d %s %s %s", name, hostPath, guestFlag, guestValue), 1)
 	if err != nil {
 		return nil, err
-	}
-
-	if c.v.verbose && len(olines) > 0 {
-		fmt.Printf("[%s] %s\n", name, olines[0])
 	}
 
 	vm, err := c.GetVM(name)
@@ -598,4 +616,61 @@ func (c *vmcli) Create(name, guestOS string) (*VM, error) {
 		return nil, err
 	}
 	return &vm, nil
+}
+
+func (c *vmcli) diskPathnames(vm *VM, diskName string) (string, string, error) {
+	vmxPath, vmxFile := path.Split(vm.Path)
+	if !strings.HasSuffix(vmxFile, ".vmx") {
+		return "", "", fmt.Errorf("unexpected VM path: %s", vm.Path)
+	}
+	if !strings.HasSuffix(diskName, ".vmdk") {
+		return "", "", fmt.Errorf("unexpected disk name: %s", diskName)
+	}
+
+	diskPathname := path.Join(vmxPath, diskName)
+	hostPathname, err := PathnameFormat(c.v.Remote, diskPathname)
+	if err != nil {
+		return "", "", err
+	}
+	return diskPathname, hostPathname, nil
+}
+
+func (c *vmcli) CreateDisk(vm *VM, diskName, size string, singleFile, preallocated bool) error {
+	err := c.DeleteDisk(vm, diskName)
+	if err != nil {
+		return err
+	}
+	_, hostPathname, err := c.diskPathnames(vm, diskName)
+	if err != nil {
+		return err
+	}
+	adapter := "lsilogic"
+	diskType := ParseDiskType(singleFile, preallocated)
+	err = c.execCommand(vm.Name, fmt.Sprintf("vmcli Disk Create -f %s -a %s -s %s -t %d", hostPathname, adapter, size, int(diskType)), 0)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// DANGER, WILL ROBINSON! - delete the instance's virtual disk file
+func (c *vmcli) DeleteDisk(vm *VM, diskName string) error {
+
+	_, hostPathname, err := c.diskPathnames(vm, diskName)
+	if err != nil {
+		return err
+	}
+
+	var command string
+	switch c.v.Remote {
+	case "windows":
+		command = "del " + hostPathname
+	default:
+		command = "rm " + hostPathname
+	}
+	err = c.execCommand(vm.Name, command, 0)
+	if err != nil {
+		return err
+	}
+	return nil
 }

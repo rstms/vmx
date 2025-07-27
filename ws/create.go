@@ -112,13 +112,13 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 		return "", err
 	}
 
-	err = v.CreateDisk(vm, options)
+	options.Name = vm.Name
+	options.DiskName = vm.Name + ".vmdk"
+
+	err = v.cli.CreateDisk(vm, options.DiskName, options.DiskSize, options.DiskSingleFile, options.DiskPreallocated)
 	if err != nil {
 		return "", err
 	}
-
-	options.Name = vm.Name
-	options.DiskName = vm.Name + ".vmdk"
 
 	actions, err := v.Modify(vm.Name, options, isoOptions)
 	if err != nil {
@@ -148,53 +148,6 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	}
 
 	return "create pending", nil
-}
-
-func (v *vmctl) CreateDisk(vm *VM, options CreateOptions) error {
-
-	vmDir, _ := path.Split(vm.Path)
-
-	hostDiskFile, err := PathFormat(v.Remote, path.Join(vmDir, vm.Name+".vmdk"))
-	if err != nil {
-		return err
-	}
-
-	// DANGER, WILL ROBINSON! - delete vmdk file created by 'vmcli VM Create'
-	var command string
-	switch v.Remote {
-	case "windows":
-		command = "del " + hostDiskFile
-	default:
-		command = "rm " + hostDiskFile
-	}
-
-	_, err = v.RemoteExec(command, nil)
-	if err != nil {
-		return err
-	}
-
-	diskSize, err := SizeParse(options.DiskSize)
-	if err != nil {
-		return err
-	}
-	diskSizeMB := int64(diskSize / MB)
-
-	diskType := ParseDiskType(options.DiskSingleFile, options.DiskPreallocated)
-
-	command = fmt.Sprintf("vmware-vdiskmanager -c -s %dMB -a nvme -t %d %s", diskSizeMB, diskType, hostDiskFile)
-
-	olines, err := v.RemoteExec(command, nil)
-	if err != nil {
-		return err
-	}
-	if v.verbose {
-		for _, line := range olines {
-			fmt.Printf("[%s] %s\n", vm.Name, line)
-		}
-	}
-
-	return nil
-
 }
 
 func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
