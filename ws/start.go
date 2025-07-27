@@ -136,7 +136,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 
 		if isoOptions.ModifyISO {
 			if savedBootConnected != isoOptions.IsoBootConnected {
-				msg := fmt.Sprintf("[%s] Restoring ISO boot-connected: %v\n", vm.Name, savedBootConnected)
+				msg := fmt.Sprintf("[%s] Restoring ISO boot-connected: %v", vm.Name, savedBootConnected)
 				if v.verbose {
 					fmt.Println(msg)
 				}
