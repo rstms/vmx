@@ -334,7 +334,7 @@ func (c *vmcli) SetParam(vm *VM, name, value string) error {
 
 func (c *vmcli) QueryPowerState(vm *VM) error {
 	if c.debug {
-		fmt.Printf("[%s] QueryPowerState\n", vm.Name)
+		log.Printf("[%s] QueryPowerState\n", vm.Name)
 	}
 	var state struct{ PowerState string }
 	err := c.exec(vm, "power query -f json", &state)
@@ -348,7 +348,7 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 
 func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 	if c.debug {
-		fmt.Printf("[%s] GetParams\n", vm.Name)
+		log.Printf("[%s] GetParams\n", vm.Name)
 	}
 	var params VMConfig
 	err := c.exec(vm, "configParams query -f json", &params)
