@@ -115,12 +115,16 @@ func (v *vmctl) downloadISO(vm *VM, url, cert, key, ca string) (string, error) {
 	command += fmt.Sprintf(" %s %s %s", filename_flag, hostFilename, url)
 
 	if v.verbose {
-		fmt.Printf("[%s] downloading %s to %s", vm.Name, url, vmxIsoFile)
+		fmt.Printf("[%s] downloading %s to %s...\n", vm.Name, url, vmxIsoFile)
 	}
 
 	_, err = v.RemoteExec(command, nil)
 	if err != nil {
 		return "", err
+	}
+
+	if v.verbose {
+		fmt.Printf("[%s] iso download complete\n", vm.Name)
 	}
 
 	return vmxIsoFile, err
