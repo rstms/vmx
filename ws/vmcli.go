@@ -493,7 +493,7 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 	if addressType == "static" {
 		key = "ethernet0.address"
 	}
-	addr, err := c.GetString(config, key, true)
+	addr, err := c.GetString(config, key, false)
 	if err != nil {
 		return err
 	}

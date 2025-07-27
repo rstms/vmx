@@ -2,6 +2,8 @@
 
 program != basename $$(pwd)
 
+go_version = go1.24.5
+
 latest_release != gh release list --json tagName --jq '.[0].tagName' | tr -d v
 version != cat VERSION
 
@@ -19,7 +21,7 @@ fmt: go.sum
 	fix go fmt . ./...
 
 go.mod:
-	go mod init
+	$(go_version) mod init
 
 go.sum: go.mod
 	go mod tidy
@@ -47,7 +49,6 @@ clean: logclean
 
 sterile: clean
 	which $(program) && go clean -i || true
-	go clean -r || true
-	go clean -cache
-	go clean -modcache
+	go clean -cache || true
+	go clean -modcache || true
 	rm -f go.mod go.sum
