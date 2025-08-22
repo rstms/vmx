@@ -92,7 +92,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 	var visibility string
 	if options.FullScreen {
 		if v.Remote == "windows" {
-			command = "start vmware >nul 2>nul -n -q -X " + path
+			command = "cmd /c start vmware >nul 2>nul -n -q -X " + path
 		} else {
 			command = "vmware -n -q -X " + path + "&"
 		}
