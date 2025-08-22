@@ -99,7 +99,11 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		visibility = "fullscreen"
 	} else {
 		// TODO: add '-vp password' to vmrun command for encrypted VMs
-		command = "vmrun -T ws start " + path
+		if v.Remote == "windows" {
+			command = "cmd /c start /MIN vmrun -T ws start " + path
+		} else {
+			command = "vmrun -T ws start " + path
+		}
 		if options.Background {
 			visibility = "background"
 			command += " nogui"
