@@ -36,6 +36,10 @@ test: fmt
 debug: fmt
 	go test -v -failfast -count=1 -run $(test) . ./...
 
+release:
+	$(gitclean)
+	@$(if $(update),gh release delete -y v$(version),)
+	gh release create v$(version) --notes "v$(version)"
 
 update:
 	@echo checking dependencies for updated versions 
