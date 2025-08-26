@@ -11,7 +11,7 @@ func (v *vmctl) SendKeys(vid, keys string) error {
 	var buf string
 	vm, err := v.Get(vid)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if v.debug {
 		log.Printf("keys:\n%s\n\n", HexDump([]byte(keys)))
@@ -20,10 +20,10 @@ func (v *vmctl) SendKeys(vid, keys string) error {
 	for len(keys) > 0 {
 		char, multi, tail, err := strconv.UnquoteChar(keys, byte('"'))
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		if multi {
-			return fmt.Errorf("multibyte encoding not supported: '%s'", keys)
+			return Fatalf("multibyte encoding not supported: '%s'", keys)
 		}
 		unquoted += string(char)
 		keys = tail
@@ -33,7 +33,7 @@ func (v *vmctl) SendKeys(vid, keys string) error {
 	}
 
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	for _, key := range unquoted {
 
@@ -45,24 +45,24 @@ func (v *vmctl) SendKeys(vid, keys string) error {
 			if len(buf) > 0 {
 				err := v.sendBuf(&vm, buf)
 				if err != nil {
-					return err
+					return Fatal(err)
 				}
 				buf = ""
 			}
 			hid, ok := HIDMap[key]
 			if !ok {
-				return fmt.Errorf("cannot encode: %02x %s\n", key, strconv.Quote(string(key)))
+				return Fatalf("cannot encode: %02x %s\n", key, strconv.Quote(string(key)))
 			}
 			err = v.sendCode(&vm, hid.Code, hid.Modifier)
 			if err != nil {
-				return err
+				return Fatal(err)
 			}
 		}
 	}
 	if len(buf) > 0 {
 		err := v.sendBuf(&vm, buf)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	return nil
@@ -74,11 +74,11 @@ func (v *vmctl) sendBuf(vm *VM, buf string) error {
 	}
 	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	_, err = v.RemoteExec(fmt.Sprintf("vmcli %s mks sendKeySequence %s", path, buf), nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -89,13 +89,13 @@ func (v *vmctl) sendCode(vm *VM, code, mod uint32) error {
 	}
 	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	code = code<<16 | 0x0007
 	_, err = v.RemoteExec(fmt.Sprintf("vmcli %s mks sendKeyEvent %d %d", path, code, mod), nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }

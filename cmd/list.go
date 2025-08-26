@@ -45,8 +45,8 @@ List host files.  If PATH is an instance name the instance directory is
 selected.  If the first element in path is 'iso', the configured vmware_iso
 path is used as the root.
 
-The output is the host's default directory list format.  Use --long for a
-long listing.
+The output is the host's default directory list format.  Use --detail for 
+more detailed listing.
 `,
 	Aliases: []string{"ls"},
 	Args:    cobra.RangeArgs(0, 1),
@@ -59,8 +59,8 @@ long listing.
 		iso, err := ws.IsIsoPath(vid)
 		cobra.CheckErr(err)
 		options := ws.FilesOptions{
-			Detail: ViperGetBool("long"),
-			All:    ViperGetBool("all"),
+			Detail: ViperGetBool("list.detail"),
+			All:    ViperGetBool("list.all"),
 			Iso:    iso,
 		}
 		lines, err := vmx.Files(vid, options)
@@ -90,5 +90,7 @@ long listing.
 }
 
 func init() {
-	rootCmd.AddCommand(listCmd)
+	CobraAddCommand(rootCmd, rootCmd, listCmd)
+	OptionSwitch(listCmd, "detail", "", "detailed listing")
+	OptionSwitch(listCmd, "all", "", "include stopped VM instances")
 }

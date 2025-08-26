@@ -87,7 +87,7 @@ unless specified with option flags.
 }
 
 func init() {
-	rootCmd.AddCommand(createCmd)
+	CobraAddCommand(rootCmd, rootCmd, createCmd)
 	OptionString(createCmd, "cpu", "", "1", "cpu count")
 	OptionString(createCmd, "ram", "", "2G", "memory size")
 	OptionString(createCmd, "disk", "", "16G", "disk size")

@@ -61,6 +61,6 @@ to quickly create a Cobra application.`,
 }
 
 func init() {
-	rootCmd.AddCommand(stopCmd)
+	CobraAddCommand(rootCmd, rootCmd, stopCmd)
 	OptionSwitch(stopCmd, "poweroff", "", "BRS operation (forced power down)")
 }

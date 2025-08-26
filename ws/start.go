@@ -20,23 +20,19 @@ type StopOptions struct {
 
 func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
 	if v.debug {
-		odump, err := FormatJSON(options)
-		if err != nil {
-			log.Fatal(err)
-		}
-		idump, err := FormatJSON(isoOptions)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Start(%s, options, isoOptions)\noptions: %s\nisoOptions: %s\n", vid, odump, idump)
+		log.Printf("Start(%s, options, isoOptions)\noptions: %s\nisoOptions: %s\n",
+			vid,
+			FormatJSON(options),
+			FormatJSON(isoOptions),
+		)
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	ok, err := v.checkPowerState(&vm, "start", "on")
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if ok {
 		return "already started", nil
@@ -47,7 +43,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		var currentIsoOptions IsoOptions
 		err := v.cli.GetIsoOptions(&vm, &currentIsoOptions)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 
 		savedBootConnected = currentIsoOptions.IsoBootConnected
@@ -80,13 +76,13 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		}
 		_, err = v.Modify(vid, CreateOptions{}, isoOptions)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 	}
 
 	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	command := ""
 	var visibility string
@@ -116,7 +112,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 	if options.ModifyStretch {
 		err = v.setStretch(&vm, options.StretchEnabled)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 	}
 
@@ -126,7 +122,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 
 	err = v.RemoteSpawn(command, nil)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if v.verbose {
 		fmt.Printf("[%s] Start request complete\n", vm.Name)
@@ -135,7 +131,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 	if options.Wait {
 		err := v.Wait(vid, "on")
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 
 		if isoOptions.ModifyISO {
@@ -147,7 +143,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 				log.Println(msg)
 				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
 				if err != nil {
-					return "", err
+					return "", Fatal(err)
 				}
 			}
 		}
@@ -163,19 +159,19 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	ok, err := v.checkPowerState(&vm, "stop", "off")
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if ok {
 		return "already stopped", nil
 	}
 	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	// FIXME: may need -vp PASSWORD here for encrypted instances
 	command := "vmrun -T ws stop " + path
@@ -189,7 +185,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 
 	_, err = v.RemoteExec(command, nil)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	if v.verbose {
@@ -198,7 +194,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	if options.Wait {
 		err := v.Wait(vid, "off")
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return "stopped", nil
 	}

@@ -97,19 +97,16 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	// check for existing instance
 	_, err := v.cli.GetVM(name)
 	if err == nil {
-		return "", fmt.Errorf("create failed, instance '%s' exists", name)
+		return "", Fatalf("create failed, instance '%s' exists", name)
 	}
 
 	// log create options
-	ostr, err := FormatJSON(&options)
-	if err != nil {
-		return "", err
-	}
+	ostr := FormatJSON(&options)
 	log.Printf("create: %s\n%s\n", name, ostr)
 
 	vm, err := v.cli.Create(name, options.GuestOS)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	options.Name = vm.Name
@@ -117,12 +114,12 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 
 	err = v.cli.CreateDisk(vm, options.DiskName, options.DiskSize, options.DiskSingleFile, options.DiskPreallocated)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	actions, err := v.Modify(vm.Name, options, isoOptions)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	if v.verbose {
@@ -134,15 +131,15 @@ func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions
 	if options.Wait {
 		err := v.Wait(name, "off")
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		_, err = v.Start(name, StartOptions{Background: true, Wait: true}, IsoOptions{})
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		_, err = v.Stop(name, StopOptions{Wait: true})
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return "created", nil
 	}
@@ -156,27 +153,27 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	}
 	vm, err := v.Get(vid)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	err = v.cli.QueryPowerState(&vm)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if vm.PowerState != "off" {
 		if options.Force {
 			_, err := v.Stop(vid, StopOptions{PowerOff: true, Wait: true})
 			if err != nil {
-				return err
+				return Fatal(err)
 			}
 		} else {
-			return fmt.Errorf("[%s] --kill required; power state is '%s'", vm.Name, vm.PowerState)
+			return Fatalf("[%s] --kill required; power state is '%s'", vm.Name, vm.PowerState)
 		}
 
 	}
 	dir, _ := path.Split(vm.Path)
 	hostPath, err := PathnameFormat(v.Remote, dir)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	hostPath = strings.TrimRight(hostPath, "/\\")
 	var command string
@@ -188,7 +185,7 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 	}
 	_, err = v.RemoteExec(command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }

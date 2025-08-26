@@ -31,36 +31,23 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-var sendkeysCmd = &cobra.Command{
-	Use:   "sendkeys VID KEYS",
-	Short: "send keystrokes to the instance",
+var configFileCmd = &cobra.Command{
+	Use:   "file",
+	Short: "output the config file",
 	Long: `
-Translate the KEYS argument into HID scan codes and send the result to the
-selected instance using the vmcli utility on the host.
-
-Quoting:
-In bash, use single quotes around KEYS, backslash-escape double quotes, and
-escape any single quotes using backslash-escaped hex (\x27).  Standard 
-backslash escapes such as \n are decoded.
-
-Examples:
-vmx sendkeys testvm 'This has a \x27quoted\x27 elements\n'
-vmx sendkeys testvm 'This has a \"double-quoted\" element\n'
-vmx sendkeys testvm 'echo $PATH\n'
+write the pathname of the active config file to stdout
 `,
-	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		vid := args[0]
-		keys := args[1]
-		InitController()
-		err := vmx.SendKeys(vid, keys)
-		cobra.CheckErr(err)
+		fmt.Println(viper.ConfigFileUsed())
 	},
 }
 
 func init() {
-	CobraAddCommand(rootCmd, rootCmd, sendkeysCmd)
+	CobraAddCommand(rootCmd, configCmd, configFileCmd)
 }

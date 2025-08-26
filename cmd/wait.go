@@ -54,5 +54,5 @@ The default timeout (60 seconds) can be adjusted with the --timeout option
 }
 
 func init() {
-	rootCmd.AddCommand(waitCmd)
+	CobraAddCommand(rootCmd, rootCmd, waitCmd)
 }

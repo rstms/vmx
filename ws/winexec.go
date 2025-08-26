@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"fmt"
 	"log"
 )
 
@@ -33,7 +32,7 @@ func NewWinExecClient() (*WinExecClient, error) {
 
 	api, err := NewAPIClient(url, cert, key, ca, nil)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	client := WinExecClient{
 		api:     api,
@@ -55,18 +54,18 @@ func (w *WinExecClient) Spawn(command string, exitCode *int) error {
 	}
 	_, err := w.api.Post("/spawn/", &request, &response, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if w.verbose {
 		log.Printf("winexec spawn response: %+v\n", response)
 	}
 	if !response.Success {
-		return fmt.Errorf("WinExec: spawn failed: %v", response)
+		return Fatalf("WinExec: spawn failed: %v", response)
 	}
 	if exitCode != nil {
 		*exitCode = response.ExitCode
 	} else if response.ExitCode != 0 {
-		return fmt.Errorf("Spawned Process '%s' exited %d", command, response.ExitCode)
+		return Fatalf("Spawned Process '%s' exited %d", command, response.ExitCode)
 	}
 	return nil
 }
@@ -82,18 +81,18 @@ func (w *WinExecClient) Exec(command string, args []string, exitCode *int) (stri
 	}
 	_, err := w.api.Post("/exec/", &request, &response, nil)
 	if err != nil {
-		return "", "", err
+		return "", "", Fatal(err)
 	}
 	if w.verbose {
 		log.Printf("winexec exec response: %+v\n", response)
 	}
 	if !response.Success {
-		return "", "", fmt.Errorf("WinExec: exec failed: %v", response)
+		return "", "", Fatalf("WinExec: exec failed: %v", response)
 	}
 	if exitCode != nil {
 		*exitCode = response.ExitCode
 	} else if response.ExitCode != 0 {
-		return "", "", fmt.Errorf("Process '%s' exited %d\n%s", command, response.ExitCode, response.Stderr)
+		return "", "", Fatalf("Process '%s' exited %d\n%s", command, response.ExitCode, response.Stderr)
 	}
 	return response.Stdout, response.Stderr, nil
 }

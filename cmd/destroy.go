@@ -91,7 +91,7 @@ func confirm(prompt string) bool {
 }
 
 func init() {
-	rootCmd.AddCommand(destroyCmd)
+	CobraAddCommand(rootCmd, rootCmd, destroyCmd)
 	OptionSwitch(destroyCmd, "force", "", "suppress confirmation prompt")
 	OptionSwitch(destroyCmd, "kill", "", "destroy running instance")
 }

@@ -52,7 +52,7 @@ Display VM instance data
 			vid = args[0]
 		}
 		options := ws.ShowOptions{
-			Detail:  ViperGetBool("long"),
+			Detail:  ViperGetBool("detail"),
 			Running: !ViperGetBool("all"),
 		}
 		vms, err := vmx.Show(vid, options)
@@ -83,5 +83,7 @@ Display VM instance data
 }
 
 func init() {
-	rootCmd.AddCommand(showCmd)
+	CobraAddCommand(rootCmd, rootCmd, showCmd)
+	OptionSwitch(showCmd, "detail", "", "detailed listing")
+	OptionSwitch(showCmd, "all", "", "include stopped instance")
 }

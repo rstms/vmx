@@ -21,7 +21,7 @@ func SizeParse(param string) (int64, error) {
 	match := SIZE_PATTERN.FindStringSubmatch(param)
 	//fmt.Printf("match: %d %v\n", len(match), match)
 	if len(match) != 3 {
-		return 0, fmt.Errorf("failed parsing size parameter: '%s'", param)
+		return 0, Fatalf("failed parsing size parameter: '%s'", param)
 	}
 	number := match[1]
 	suffix := match[2]
@@ -39,11 +39,11 @@ func SizeParse(param string) (int64, error) {
 	case "P", "PB":
 		multiplier = PB
 	default:
-		return 0, fmt.Errorf("unexpected suffix in size parameter: '%s'", param)
+		return 0, Fatalf("unexpected suffix in size parameter: '%s'", param)
 	}
 	fsize, err := strconv.ParseFloat(number, 64)
 	if err != nil {
-		return 0, err
+		return 0, Fatal(err)
 	}
 	size := int64(fsize * float64(multiplier))
 	//fmt.Printf("%s == %d\n", param, size)

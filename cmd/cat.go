@@ -55,5 +55,5 @@ Write the content of the instance's VMX file to stdout
 }
 
 func init() {
-	rootCmd.AddCommand(catCmd)
+	CobraAddCommand(rootCmd, rootCmd, catCmd)
 }

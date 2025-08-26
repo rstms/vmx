@@ -58,5 +58,5 @@ var killCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(killCmd)
+	CobraAddCommand(rootCmd, rootCmd, killCmd)
 }

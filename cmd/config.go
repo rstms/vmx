@@ -32,43 +32,21 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "output configuration",
+	Short: "config subcommands",
 	Long: `
-write current configuration data to stdout in YAML format
+subcommand for viewing or modifying the config file
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		if !ViperGetBool("no-init") {
-			InitController()
-		}
-		file, err := os.CreateTemp("", "*.yaml")
-		cobra.CheckErr(err)
-		func() {
-			defer file.Close()
-			err = viper.WriteConfigTo(file)
-			cobra.CheckErr(err)
-		}()
-		defer func() {
-			cobra.CheckErr(os.Remove(file.Name()))
-		}()
-		data, err := os.ReadFile(file.Name())
-		cobra.CheckErr(err)
-		filename := viper.ConfigFileUsed()
-		if filename != "" {
-			fmt.Printf("# %s\n", filename)
-		}
-		fmt.Println(string(data))
+		fmt.Println(ConfigString(!ViperGetBool("config.no_header")))
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(configCmd)
-	OptionSwitch(configCmd, "no-init", "", "disable controller startup")
+	CobraAddCommand(rootCmd, rootCmd, configCmd)
+	OptionSwitch(configCmd, "no-header", "", "suppress config header comments")
 }

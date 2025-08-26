@@ -14,18 +14,18 @@ func (v *vmctl) ReadHostFile(vm *VM, filename string) ([]byte, error) {
 	}
 	tempFile, err := os.CreateTemp("", "vmx_read.*")
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, Fatal(err)
 	}
 	localPath := tempFile.Name()
 	err = tempFile.Close()
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, Fatal(err)
 	}
 	defer os.Remove(localPath)
 
 	err = v.Download(vm.Name, localPath, filename)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, Fatal(err)
 	}
 	return os.ReadFile(localPath)
 }
@@ -36,17 +36,17 @@ func (v *vmctl) WriteHostFile(vm *VM, filename string, data []byte) error {
 	}
 	tempFile, err := os.CreateTemp("", "vmx_write.*")
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	localPath := tempFile.Name()
 	err = tempFile.Close()
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	defer os.Remove(localPath)
 	err = os.WriteFile(localPath, data, 0600)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return v.Upload(vm.Name, localPath, filename)
 }
@@ -58,16 +58,16 @@ func (v *vmctl) copyFile(dstPath, srcPath string) error {
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	defer dst.Close()
 	src, err := os.Open(srcPath)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	defer src.Close()
 	_, err = io.Copy(dst, src)
-	return err
+	return Fatal(err)
 
 }
 
@@ -77,7 +77,7 @@ func (v *vmctl) Download(vid string, localDestPathname, vmDirFilename string) er
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	dir, _ := path.Split(vm.Path)
 	remoteSourcePathname := path.Join(dir, vmDirFilename)
@@ -91,29 +91,29 @@ func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname str
 
 	localDest, err := PathnameFormat(v.Local, localDestPathname)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	local, err := isLocal()
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if local {
 		localSource, err := PathnameFormat(v.Local, remoteSourcePathname)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		return v.copyFile(localDest, localSource)
 	}
 
 	sourcePath, err := PathnameFormat("scp", remoteSourcePathname)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, sourcePath)
 	args := []string{"-i", v.KeyFile, remoteSource, localDest}
 	_, err = v.exec("scp", args, "", nil)
-	return err
+	return Fatal(err)
 }
 
 func (v *vmctl) Upload(vid, localSourcePathname, vmDirFilename string) error {
@@ -122,7 +122,7 @@ func (v *vmctl) Upload(vid, localSourcePathname, vmDirFilename string) error {
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	dir, _ := path.Split(vm.Path)
 	remoteDestPathname := path.Join(dir, vmDirFilename)
@@ -136,26 +136,26 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 
 	localSource, err := PathnameFormat(v.Local, localSourcePathname)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	local, err := isLocal()
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if local {
 		localDest, err := PathnameFormat(v.Local, remoteDestPathname)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		return v.copyFile(localDest, localSource)
 	}
 
 	remoteDest, err := PathnameFormat("scp", remoteDestPathname)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, remoteDest)
 	args := []string{"-i", v.KeyFile, localSource, remoteTarget}
 	_, err = v.exec("scp", args, "", nil)
-	return err
+	return Fatal(err)
 }

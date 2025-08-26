@@ -72,7 +72,7 @@ func ScanVMX(data []byte) (map[string]string, error) {
 	}
 	err := scanner.Err()
 	if err != nil {
-		return disks, err
+		return disks, Fatal(err)
 	}
 	return disks, nil
 }
@@ -85,7 +85,7 @@ func NewVMDisk(device, filename string, data []byte) (*VMDisk, error) {
 	}
 	err := disk.parseVMDK(data)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	return &disk, nil
 }
@@ -96,15 +96,15 @@ func (d *VMDisk) parseVMDK(data []byte) error {
 
 	descriptor, err := vmdk.ParseDescriptor(buf)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	descriptorData, err := json.MarshalIndent(descriptor, "", "  ")
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	err = json.Unmarshal(descriptorData, &d.Descriptor)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	log.Printf("descriptorData: %s\n", string(descriptorData))
 

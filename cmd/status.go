@@ -49,5 +49,5 @@ Show the status of the selected instance.
 }
 
 func init() {
-	rootCmd.AddCommand(statusCmd)
+	CobraAddCommand(rootCmd, rootCmd, statusCmd)
 }

@@ -37,10 +37,8 @@ import (
 
 	"github.com/rstms/vmx/ws"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var cfgFile string
 var ExitCode *int
 
 var OutputJSON bool
@@ -87,12 +85,9 @@ func Execute() {
 		os.Exit(1)
 	}
 }
+
 func init() {
-	cobra.OnInitialize(InitConfig)
-	OptionString(rootCmd, "config", "c", "", "config file")
-	OptionString(rootCmd, "logfile", "", "", "log filename")
-	OptionSwitch(rootCmd, "debug", "d", "produce debug output")
-	OptionSwitch(rootCmd, "verbose", "v", "produce diagnostic output")
+	CobraInit(rootCmd)
 	OptionString(rootCmd, "timeout", "t", "60", "wait timeout in seconds")
 	OptionString(rootCmd, "interval", "i", "1", "wait query interval in seconds")
 	OptionSwitch(rootCmd, "json", "", "format output as JSON (default)")
@@ -100,7 +95,6 @@ func init() {
 
 	OptionString(rootCmd, "shell", "", "ssh", "remote shell")
 	OptionSwitch(rootCmd, "all", "a", "select all items")
-	OptionSwitch(rootCmd, "long", "l", "add output detail")
 
 	OptionSwitch(rootCmd, "no-humanize", "n", "display sizes in bytes")
 	OptionSwitch(rootCmd, "wait", "w", "wait for powerState after start/stop/kill")
@@ -117,11 +111,6 @@ func init() {
 }
 
 func InitController() {
-	// copy selected cli config to vmx section
-	viper.Set("vmx.timeout", ViperGetInt("timeout"))
-	viper.Set("vmx.interval", ViperGetInt("interval"))
-	viper.Set("vmx.verbose", ViperGetBool("verbose"))
-	viper.Set("vmx.debug", ViperGetBool("debug"))
 	c, err := ws.NewController()
 	cobra.CheckErr(err)
 	if ViperGetBool("verbose") {
@@ -144,7 +133,7 @@ func InitIsoOptions() (*ws.IsoOptions, error) {
 	enable := iso != ""
 	disable := ViperGetBool("iso_disable")
 	if enable && disable {
-		return nil, fmt.Errorf("conflict: iso/iso-disable")
+		return nil, Fatalf("conflict: iso/iso-disable")
 	}
 
 	// ModifyBootConnected is set when ONLY IsoBootConnected is being changed

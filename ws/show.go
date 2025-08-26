@@ -21,13 +21,13 @@ func (v *vmctl) Show(name string, options ShowOptions) (*[]VMState, error) {
 		// we only need the running vms, so spoof vids with only the Name using vmrun output
 		olines, err := v.RemoteExec("vmrun list", nil)
 		if err != nil {
-			return nil, err
+			return nil, Fatal(err)
 		}
 		for _, line := range olines {
 			if !strings.HasPrefix(line, "Total running VMs:") {
 				runningName, err := PathToName(line)
 				if err != nil {
-					return nil, err
+					return nil, Fatal(err)
 				}
 				vids = append(vids, &VID{Name: runningName})
 			}
@@ -36,7 +36,7 @@ func (v *vmctl) Show(name string, options ShowOptions) (*[]VMState, error) {
 		// set vids from API
 		v, err := v.cli.GetVIDs()
 		if err != nil {
-			return nil, err
+			return nil, Fatal(err)
 		}
 		vids = v
 	}
@@ -53,7 +53,7 @@ func (v *vmctl) Show(name string, options ShowOptions) (*[]VMState, error) {
 		if options.Detail {
 			state, err := v.GetState(vid.Name)
 			if err != nil {
-				return nil, err
+				return nil, Fatal(err)
 			}
 			vms[i] = *state
 		} else {

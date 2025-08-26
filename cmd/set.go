@@ -61,5 +61,5 @@ Properties such as "power" can modify the running state of the VM
 }
 
 func init() {
-	rootCmd.AddCommand(setCmd)
+	CobraAddCommand(rootCmd, rootCmd, setCmd)
 }

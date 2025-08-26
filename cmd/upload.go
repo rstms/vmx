@@ -61,5 +61,5 @@ the filename of LOCAL_FILE will used as HOST_FILENAME.
 }
 
 func init() {
-	rootCmd.AddCommand(uploadCmd)
+	CobraAddCommand(rootCmd, rootCmd, uploadCmd)
 }

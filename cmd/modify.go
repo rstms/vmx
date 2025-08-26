@@ -102,13 +102,13 @@ func initETHOptions(options *ws.CreateOptions) error {
 	enable := ViperGetBool("eth_enable")
 	disable := ViperGetBool("eth_disable")
 	if enable && disable {
-		return fmt.Errorf("conflict: eth_enable/eth_disable")
+		return Fatalf("conflict: eth_enable/eth_disable")
 	}
 	address := ViperGetString("eth_mac")
 	if address != "" {
 		enable = true
 		if disable {
-			return fmt.Errorf("conflict: eth_mac/eth_disable")
+			return Fatalf("conflict: eth_mac/eth_disable")
 		}
 	}
 	switch {
@@ -134,7 +134,7 @@ func initTTYOptions(options *ws.CreateOptions) error {
 	switch {
 	case ttyPipe != "":
 		if disable {
-			return fmt.Errorf("conflict: tty-pipe/tty-disable")
+			return Fatalf("conflict: tty-pipe/tty-disable")
 		}
 		options.ModifyTTY = true
 		options.SerialPipe = ttyPipe
@@ -142,10 +142,10 @@ func initTTYOptions(options *ws.CreateOptions) error {
 		options.SerialV2V = ttyV2V
 	case disable:
 		if ttyClient {
-			return fmt.Errorf("conflict: tty-disable/tty-client")
+			return Fatalf("conflict: tty-disable/tty-client")
 		}
 		if ttyV2V {
-			return fmt.Errorf("conflict: tty-disable/tty-v2v")
+			return Fatalf("conflict: tty-disable/tty-v2v")
 		}
 		options.ModifyTTY = true
 	}
@@ -156,7 +156,7 @@ func initVNCOptions(options *ws.CreateOptions) error {
 	enable := ViperGetBool("vnc_enable")
 	disable := ViperGetBool("vnc_disable")
 	if enable && disable {
-		return fmt.Errorf("conflict: vnc-enable/vnc-disable")
+		return Fatalf("conflict: vnc-enable/vnc-disable")
 	}
 	switch {
 	case enable:
@@ -173,7 +173,7 @@ func initEFIOptions(options *ws.CreateOptions) error {
 	bootEFI := ViperGetBool("boot_efi")
 	bootBIOS := ViperGetBool("boot_bios")
 	if bootEFI && bootBIOS {
-		return fmt.Errorf("conflict: boot-efi/boot-bios")
+		return Fatalf("conflict: boot-efi/boot-bios")
 	}
 	switch {
 	case bootEFI:
@@ -191,13 +191,13 @@ func initShareOptions(options *ws.CreateOptions) error {
 	switch {
 	case enable != "":
 		if disable {
-			return fmt.Errorf("conflict: share-enable/share-disable")
+			return Fatalf("conflict: share-enable/share-disable")
 		}
 		options.ModifyShare = true
 		options.FileShareEnabled = true
 		host, guest, ok := strings.Cut(enable, ",")
 		if !ok || host == "" || guest == "" {
-			return fmt.Errorf("failed parsing share-enable paths: '%s'", enable)
+			return Fatalf("failed parsing share-enable paths: '%s'", enable)
 		}
 		options.SharedHostPath = host
 		options.SharedGuestPath = guest
@@ -213,7 +213,7 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 	switch {
 	case enable:
 		if disable {
-			return fmt.Errorf("conflict: clipboard-enable/clipboard-disable")
+			return Fatalf("conflict: clipboard-enable/clipboard-disable")
 		}
 		options.ModifyClipboard = true
 		options.ClipboardEnabled = true
@@ -224,7 +224,7 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 }
 
 func init() {
-	rootCmd.AddCommand(modifyCmd)
+	CobraAddCommand(rootCmd, rootCmd, modifyCmd)
 	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet [auto-generated MAC]")
 	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet [user-defined MAC]")
 	OptionSwitch(modifyCmd, "eth-disable", "", "remove ethernet device")

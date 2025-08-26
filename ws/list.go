@@ -30,14 +30,14 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	if options.Iso {
 		p, err := FormatIsoPath(v.IsoPath, vid)
 		if err != nil {
-			return lines, err
+			return lines, Fatal(err)
 		}
 		paths = []string{p}
 		pattern = ISO_PATTERN
 	} else if vid == "" {
 		vmids, err := v.cli.GetVIDs()
 		if err != nil {
-			return lines, err
+			return lines, Fatal(err)
 		}
 		for _, vmid := range vmids {
 			vmPath, _ := path.Split(vmid.Path)
@@ -47,7 +47,7 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	} else {
 		vm, err := v.cli.GetVM(vid)
 		if err != nil {
-			return lines, err
+			return lines, Fatal(err)
 		}
 		vmPath, _ := path.Split(vm.Path)
 		paths = []string{vmPath}
@@ -60,7 +60,7 @@ func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	for _, listPath := range paths {
 		plines, err := v.listFiles(listPath, options.Detail, pattern)
 		if err != nil {
-			return lines, err
+			return lines, Fatal(err)
 		}
 		lines = append(lines, plines...)
 	}
@@ -82,7 +82,7 @@ func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) 
 
 	n, err := PathNormalize(listPath)
 	if err != nil {
-		return lines, err
+		return lines, Fatal(err)
 	}
 	if n != listPath {
 		log.Printf("WARNING: listFiles received non-normalized path: '%s'\n", listPath)
@@ -91,7 +91,7 @@ func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) 
 
 	hostPath, err := PathnameFormat(v.Remote, listPath)
 	if err != nil {
-		return lines, err
+		return lines, Fatal(err)
 	}
 
 	var command string
@@ -112,7 +112,7 @@ func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) 
 
 	olines, err := v.RemoteExec(command, nil)
 	if err != nil {
-		return lines, err
+		return lines, Fatal(err)
 	}
 
 	log.Printf("listFiles pattern: %+v\n", pattern)
@@ -126,7 +126,7 @@ func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) 
 		} else if pattern.MatchString(line) {
 			nline, err := PathNormalize(path.Join(listPath, line))
 			if err != nil {
-				return lines, err
+				return lines, Fatal(err)
 			}
 			lines = append(lines, nline)
 		}

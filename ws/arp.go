@@ -40,11 +40,11 @@ func (v *vmctl) ArpQuery(vm *VM) (string, error) {
 	}
 	lines, err := v.RemoteExec(command, nil)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	addr, err := ArpScan(vm.MacAddress, lines)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	return addr, nil
 }

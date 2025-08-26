@@ -52,5 +52,5 @@ VMDK file.  Output the disk details in JSON format
 }
 
 func init() {
-	rootCmd.AddCommand(diskinfoCmd)
+	CobraAddCommand(rootCmd, rootCmd, diskinfoCmd)
 }

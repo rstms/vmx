@@ -76,7 +76,7 @@ directory.
 		powerState, err := vmx.GetProperty(vm.Id, "power")
 		cobra.CheckErr(err)
 		if powerState != "off" {
-			err := fmt.Errorf("cannot edit in power state: %s", powerState)
+			err := Fatalf("cannot edit in power state: %s", powerState)
 			cobra.CheckErr(err)
 		}
 
@@ -151,11 +151,11 @@ func backupFilename(pathname string) (string, error) {
 		backupName = fmt.Sprintf("%s.bak~%02d", name, count)
 		count += 1
 		if count > MAX_BACKUP_FILES {
-			return "", fmt.Errorf("overflow generating unique backup filename in: %s\n", dir)
+			return "", Fatalf("overflow generating unique backup filename in: %s\n", dir)
 		}
 	}
 }
 
 func init() {
-	rootCmd.AddCommand(editCmd)
+	CobraAddCommand(rootCmd, rootCmd, editCmd)
 }

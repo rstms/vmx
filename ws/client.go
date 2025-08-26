@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -26,8 +25,8 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 	api := APIClient{
 		URL:     url,
 		Headers: make(map[string]string),
-		verbose: ViperGetBool("api_client.verbose"),
-		debug:   ViperGetBool("api_client.debug"),
+		verbose: ViperGetBool("verbose"),
+		debug:   ViperGetBool("debug"),
 	}
 
 	if headers != nil {
@@ -44,22 +43,29 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 	if certFile != "" || keyFile != "" || caFile != "" {
 		tlsConfig := tls.Config{}
 		if certFile == "" || keyFile == "" || caFile == "" {
-			return nil, fmt.Errorf("incomplete TLS config: cert=%s key=%s ca=%s\n", certFile, keyFile, caFile)
+			return nil, Fatalf("incomplete TLS config: cert=%s key=%s ca=%s\n", certFile, keyFile, caFile)
 		}
 
+		if api.debug {
+			log.Printf("cert: %s\n", certFile)
+			log.Printf("key: %s\n", keyFile)
+		}
 		cert, err := tls.LoadX509KeyPair(os.ExpandEnv(certFile), os.ExpandEnv(keyFile))
 		if err != nil {
-			return nil, fmt.Errorf("error loading client certificate pair: %v", err)
+			return nil, Fatalf("error loading client certificate pair: %v", err)
 		}
 
+		if api.debug {
+			log.Printf("CA: %s\n", caFile)
+		}
 		caCert, err := ioutil.ReadFile(os.ExpandEnv(caFile))
 		if err != nil {
-			return nil, fmt.Errorf("error loading certificate authority file: %v", err)
+			return nil, Fatalf("error loading certificate authority file: %v", err)
 		}
 
 		caCertPool, err := x509.SystemCertPool()
 		if err != nil {
-			return nil, fmt.Errorf("error opening system certificate pool: %v", err)
+			return nil, Fatalf("error opening system certificate pool: %v", err)
 		}
 		caCertPool.AppendCertsFromPEM(caCert)
 		tlsConfig.Certificates = []tls.Certificate{cert}
@@ -70,24 +76,6 @@ func NewAPIClient(url, certFile, keyFile, caFile string, headers *map[string]str
 	api.Client = &http.Client{Transport: &transport}
 
 	return &api, nil
-}
-
-func FormatJSON(v any) (string, error) {
-	formatted, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed formatting JSON response: %v", err)
-	}
-	return string(formatted), nil
-}
-
-func LogJSON(label string, v any) {
-	text, err := FormatJSON(v)
-	if err != nil {
-		log.Printf("LogJSON: %v", err)
-		log.Printf("%s: %+v\n", label, v)
-	} else {
-		log.Printf("%s: %s\n", label, text)
-	}
 }
 
 func (a *APIClient) Close() {
@@ -121,13 +109,13 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 	default:
 		requestBytes, err = json.Marshal(requestData)
 		if err != nil {
-			return "", fmt.Errorf("failed marshalling JSON body for %s request: %v", method, err)
+			return "", Fatalf("failed marshalling JSON body for %s request: %v", method, err)
 		}
 	}
 
 	request, err := http.NewRequest(method, a.URL+path, bytes.NewBuffer(requestBytes))
 	if err != nil {
-		return "", fmt.Errorf("failed creating %s request: %v", method, err)
+		return "", Fatalf("failed creating %s request: %v", method, err)
 	}
 
 	// add the headers set up at instance init
@@ -158,12 +146,12 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 
 	response, err := a.Client.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("request failed: %v", err)
+		return "", Fatalf("request failed: %v", err)
 	}
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return "", fmt.Errorf("failure reading response body: %v", err)
+		return "", Fatalf("failure reading response body: %v", err)
 	}
 	if a.verbose {
 		log.Printf("--> '%s' (%d bytes)\n", response.Status, len(body))
@@ -178,13 +166,13 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 	if len(body) > 0 {
 		err = json.Unmarshal(body, responseData)
 		if err != nil {
-			return "", fmt.Errorf("failed decoding JSON response: %v", err)
+			return "", Fatalf("failed decoding JSON response: %v", err)
 		}
-		t, err := FormatJSON(responseData)
+		t, err := json.MarshalIndent(responseData, "", "  ")
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
-		text = t
+		text = string(t)
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -192,7 +180,7 @@ func (a *APIClient) request(method, path string, requestData, responseData inter
 		if len(body) > 0 {
 			detail = "\n" + string(body)
 		}
-		return "", fmt.Errorf("%s%s", response.Status, detail)
+		return "", Fatalf("%s%s", response.Status, detail)
 	}
 
 	return text, nil

@@ -31,36 +31,25 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
-var sendkeysCmd = &cobra.Command{
-	Use:   "sendkeys VID KEYS",
-	Short: "send keystrokes to the instance",
-	Long: `
-Translate the KEYS argument into HID scan codes and send the result to the
-selected instance using the vmcli utility on the host.
+var configCatCmd = &cobra.Command{
+	Use:   "cat",
+	Short: "A brief description of your command",
+	Long: `A longer description that spans multiple lines and likely contains examples
+and usage of using your command. For example:
 
-Quoting:
-In bash, use single quotes around KEYS, backslash-escape double quotes, and
-escape any single quotes using backslash-escaped hex (\x27).  Standard 
-backslash escapes such as \n are decoded.
-
-Examples:
-vmx sendkeys testvm 'This has a \x27quoted\x27 elements\n'
-vmx sendkeys testvm 'This has a \"double-quoted\" element\n'
-vmx sendkeys testvm 'echo $PATH\n'
-`,
-	Args: cobra.ExactArgs(2),
+Cobra is a CLI library for Go that empowers applications.
+This application is a tool to generate the needed files
+to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		vid := args[0]
-		keys := args[1]
-		InitController()
-		err := vmx.SendKeys(vid, keys)
-		cobra.CheckErr(err)
+		fmt.Println(ConfigString(true))
 	},
 }
 
 func init() {
-	CobraAddCommand(rootCmd, rootCmd, sendkeysCmd)
+	CobraAddCommand(rootCmd, configCmd, configCatCmd)
 }

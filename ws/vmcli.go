@@ -28,17 +28,17 @@ func NewCliClient(v *vmctl) *vmcli {
 func (c *vmcli) exec(vm *VM, command string, result any) error {
 	hostPath, err := PathnameFormat(c.v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	olines, err := c.v.RemoteExec(fmt.Sprintf("vmcli %s %s", command, hostPath), nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if result != nil {
 		stdout := strings.Join(olines, "\n")
 		err = json.Unmarshal([]byte(stdout), result)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	return nil
@@ -50,7 +50,7 @@ func (c *vmcli) execCommand(name, command string, lines int) error {
 	}
 	olines, err := c.v.RemoteExec(command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	var count int
 	if c.v.verbose && len(olines) > 0 {
@@ -73,7 +73,7 @@ func (c *vmcli) GetVIDs() ([]*VID, error) {
 	for _, rootPath := range c.v.Roots {
 		err := c.getPathVIDs(rootPath)
 		if err != nil {
-			return vids, err
+			return vids, Fatal(err)
 		}
 	}
 	for _, vid := range c.ByPath {
@@ -93,19 +93,19 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		command := "dir /B /AD " + hostPath
 		dirs, err := c.v.RemoteExec(command, nil)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		for _, dir := range dirs {
 			dir = strings.TrimSpace(dir)
 			if dir != "" {
 				normalDir, err := PathNormalize(dir)
 				if err != nil {
-					return err
+					return Fatal(err)
 				}
 				vmxFile := path.Join(vmPath, normalDir, normalDir+".vmx")
 				exists, err := c.windowsFileExists(vmxFile)
 				if err != nil {
-					return err
+					return Fatal(err)
 				}
 				if exists {
 					files[path.Join(vmPath, normalDir, normalDir+".vmx")] = true
@@ -116,7 +116,7 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		command := fmt.Sprintf("find %s -maxdepth 2 -type f -name '*.vmx'", hostPath)
 		lines, err := c.v.RemoteExec(command, nil)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		for _, line := range lines {
 			files[line] = true
@@ -125,7 +125,7 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 	for file, _ := range files {
 		_, err := c.newVID(file)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	return nil
@@ -134,12 +134,12 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 func (c *vmcli) windowsFileExists(pathname string) (bool, error) {
 	hostPath, err := PathFormat(c.v.Remote, pathname)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	var exitCode int
 	_, err = c.v.RemoteExec("dir >NUL 2>NUL "+hostPath, &exitCode)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	if exitCode == 0 {
 		return true, nil
@@ -152,11 +152,11 @@ func (c *vmcli) newVID(pathname string) (*VID, error) {
 	//log.Printf("newVID %s\n", pathname)
 	vmxPath, err := PathNormalize(pathname)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	name, err := PathToName(vmxPath)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	vid := VID{
 		Name: name,
@@ -165,7 +165,7 @@ func (c *vmcli) newVID(pathname string) (*VID, error) {
 	}
 	current, ok := c.ById[vid.Id]
 	if ok {
-		return nil, fmt.Errorf("VM exits: '%+v'", *current)
+		return nil, Fatalf("VM exits: '%+v'", *current)
 	}
 	c.ById[vid.Id] = &vid
 	c.ByName[vid.Name] = &vid
@@ -185,7 +185,7 @@ func (c *vmcli) IsVM(vid string) (bool, error) {
 		// refresh ID index
 		_, err := c.GetVIDs()
 		if err != nil {
-			return false, err
+			return false, Fatal(err)
 		}
 	}
 
@@ -207,7 +207,7 @@ func (c *vmcli) IsVM(vid string) (bool, error) {
 func (c *vmcli) GetId(vid string) (string, error) {
 	ok, err := c.IsVM(vid)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if ok {
 		_, ok = c.ById[vid]
@@ -221,19 +221,19 @@ func (c *vmcli) GetId(vid string) (string, error) {
 			// vid is a valid name, return ID
 			return v.Id, nil
 		}
-		return "", fmt.Errorf("IsVM(%s) is true, but vid not in ById or ByName", vid)
+		return "", Fatalf("IsVM(%s) is true, but vid not in ById or ByName", vid)
 	}
-	return "", fmt.Errorf("VM not found: %s", vid)
+	return "", Fatalf("VM not found: %s", vid)
 }
 
 func (c *vmcli) GetVM(vid string) (VM, error) {
 	id, err := c.GetId(vid)
 	if err != nil {
-		return VM{}, err
+		return VM{}, Fatal(err)
 	}
 	v, ok := c.ById[id]
 	if !ok {
-		return VM{}, fmt.Errorf("ByID index failed: vid=%s, id=%s", vid, id)
+		return VM{}, Fatalf("ByID index failed: vid=%s, id=%s", vid, id)
 	}
 	vm := VM{Name: v.Name, Id: v.Id, Path: v.Path}
 	return vm, nil
@@ -243,63 +243,63 @@ func (c *vmcli) GetConfig(vm *VM) error {
 
 	config, err := c.GetParams(vm)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.CpuCount, err = c.GetInt(config, "numvcpus", true)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.RamSize, err = c.GetSize(config, "memsize", true)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.IsoFile, err = c.GetPath(config, "ide1:0.fileName", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.IsoAttached, err = c.GetBool(config, "ide1:0.present", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.IsoAttachOnStart, err = c.GetBool(config, "ide1:0.startConnected", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	err = c.GetMacAddress(vm, config)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.SerialAttached, err = c.GetBool(config, "serial0.present", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.SerialPipe, err = c.GetPath(config, "serial0.fileName", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.VncEnabled, err = c.GetBool(config, "RemoteDisplay.vnc.enabled", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.VncPort, err = c.GetInt(config, "RemoteDisplay.vnc.port", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	copyDisabled, err := c.GetBool(config, "isolation.tools.copy.disable", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	pasteDisabled, err := c.GetBool(config, "isolation.tools.paste.disable", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	dndDisabled, err := c.GetBool(config, "isolation.tools.dnd.disable", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	shareDisabled, err := c.GetBool(config, "isolation.tools.hgfs.disable", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.FileShareEnabled = !shareDisabled
 	vm.ClipboardEnabled = true
@@ -313,11 +313,11 @@ func (c *vmcli) GetConfig(vm *VM) error {
 func (c *vmcli) GetParam(vm *VM, name string) (string, error) {
 	config, err := c.GetParams(vm)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	value, err := value(config, name)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	ret := fmt.Sprintf("%v", value)
 	return strings.Trim(ret, `"`), nil
@@ -327,7 +327,7 @@ func (c *vmcli) SetParam(vm *VM, name, value string) error {
 	command := fmt.Sprintf("configParams SetEntry %s %s", name, value)
 	err := c.exec(vm, command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -339,7 +339,7 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 	var state struct{ PowerState string }
 	err := c.exec(vm, "power query -f json", &state)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.PowerState = state.PowerState
 	vm.Running = state.PowerState != "off"
@@ -356,7 +356,7 @@ func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 		if checkEncryptedError(vm, err) {
 			return &VMConfig{}, nil
 		}
-		return nil, err
+		return nil, Fatal(err)
 	}
 	return &params, nil
 }
@@ -364,7 +364,7 @@ func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 func value(config *VMConfig, key string) (any, error) {
 	v, ok := (*config)[key]
 	if !ok {
-		return nil, fmt.Errorf("config value not found: %s", key)
+		return nil, Fatalf("config value not found: %s", key)
 	}
 	return v, nil
 }
@@ -373,7 +373,7 @@ func (c *vmcli) GetSize(config *VMConfig, key string, required bool) (string, er
 	value, err := value(config, key)
 	if err != nil {
 		if required {
-			return "", err
+			return "", Fatal(err)
 		}
 		return "", nil
 	}
@@ -384,11 +384,11 @@ func (c *vmcli) GetSize(config *VMConfig, key string, required bool) (string, er
 	case string:
 		s, err := strconv.ParseInt(value.(string), 10, 64)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		size = s
 	default:
-		return "", fmt.Errorf("unexpected type (%v) for property: %s", T, key)
+		return "", Fatalf("unexpected type (%v) for property: %s", T, key)
 	}
 	return FormatSize(size * MB), nil
 }
@@ -397,7 +397,7 @@ func (c *vmcli) GetInt(config *VMConfig, key string, required bool) (int, error)
 	value, err := value(config, key)
 	if err != nil {
 		if required {
-			return 0, err
+			return 0, Fatal(err)
 		}
 		return 0, nil
 	}
@@ -407,11 +407,11 @@ func (c *vmcli) GetInt(config *VMConfig, key string, required bool) (int, error)
 	case string:
 		ivalue, err := strconv.Atoi(value.(string))
 		if err != nil {
-			return 0, err
+			return 0, Fatal(err)
 		}
 		return ivalue, nil
 	default:
-		return 0, fmt.Errorf("unexpected type (%v) for property: %s", T, key)
+		return 0, Fatalf("unexpected type (%v) for property: %s", T, key)
 	}
 }
 
@@ -419,7 +419,7 @@ func (c *vmcli) GetString(config *VMConfig, key string, required bool) (string, 
 	value, err := value(config, key)
 	if err != nil {
 		if required {
-			return "", err
+			return "", Fatal(err)
 		}
 		return "", nil
 	}
@@ -429,18 +429,18 @@ func (c *vmcli) GetString(config *VMConfig, key string, required bool) (string, 
 	case int:
 		return strconv.FormatInt(int64(value.(int)), 10), nil
 	default:
-		return "", fmt.Errorf("unexpected type (%v) for property: %s", T, key)
+		return "", Fatalf("unexpected type (%v) for property: %s", T, key)
 	}
 }
 
 func (c *vmcli) GetPath(config *VMConfig, key string, required bool) (string, error) {
 	value, err := c.GetString(config, key, required)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	normalized, err := PathNormalize(value)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	return normalized, nil
 }
@@ -449,7 +449,7 @@ func (c *vmcli) GetBool(config *VMConfig, key string, required bool) (bool, erro
 	value, err := value(config, key)
 	if err != nil {
 		if required {
-			return false, err
+			return false, Fatal(err)
 		}
 		return false, nil
 	}
@@ -463,12 +463,12 @@ func (c *vmcli) GetBool(config *VMConfig, key string, required bool) (bool, erro
 		case "FALSE":
 			return false, nil
 		default:
-			return false, fmt.Errorf("unexpected value '%v' for property: %s", value, key)
+			return false, Fatalf("unexpected value '%v' for property: %s", value, key)
 		}
 	case int:
 		return value != 0, nil
 	default:
-		return false, fmt.Errorf("unexpected type (%v) for property: %s", T, key)
+		return false, Fatalf("unexpected type (%v) for property: %s", T, key)
 	}
 }
 
@@ -476,14 +476,14 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 	if config == nil {
 		c, err := c.GetParams(vm)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		config = c
 	}
 	key := "ethernet0.addressType"
 	addressType, err := c.GetString(config, key, false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if addressType == "" {
 		vm.MacAddress = ""
@@ -495,7 +495,7 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 	}
 	addr, err := c.GetString(config, key, false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	vm.MacAddress = addr
 	return nil
@@ -504,20 +504,20 @@ func (c *vmcli) GetMacAddress(vm *VM, config *VMConfig) error {
 func (c *vmcli) GetIsoOptions(vm *VM, options *IsoOptions) error {
 	config, err := c.GetParams(vm)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	options.ModifyISO = true
 	options.IsoPresent, err = c.GetBool(config, "ide1:0.present", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	options.IsoFile, err = c.GetPath(config, "ide1:0.fileName", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	options.IsoBootConnected, err = c.GetBool(config, "ide1:0.startConnected", false)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -525,11 +525,11 @@ func (c *vmcli) GetIsoOptions(vm *VM, options *IsoOptions) error {
 func (c *vmcli) GetIsoStartConnected(vm *VM) (bool, error) {
 	config, err := c.GetParams(vm)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	connected, err := c.GetBool(config, "ide1:0.startConnected", false)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	return connected, nil
 }
@@ -539,7 +539,7 @@ func (c *vmcli) SetIsoStartConnected(vm *VM, connected bool) error {
 	command := fmt.Sprintf("disk setStartConnected %s %v", label, connected)
 	err := c.exec(vm, command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -550,7 +550,7 @@ func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 	command := fmt.Sprintf("disk setPresent %s %v", label, options.IsoPresent)
 	err := c.exec(vm, command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	if !options.IsoPresent {
@@ -559,19 +559,19 @@ func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
 
 	hostPath, err := PathnameFormat(c.v.Remote, options.IsoFile)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	command = fmt.Sprintf("disk setBackingInfo %s cdrom_image %s false", label, hostPath)
 	err = c.exec(vm, command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	command = fmt.Sprintf("disk setStartConnected %s %v", label, options.IsoBootConnected)
 	err = c.exec(vm, command, nil)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -584,36 +584,36 @@ func (c *vmcli) Create(name, guestOS string) (*VM, error) {
 	// make a VID, which will fail if the instance exists
 	vid, err := c.newVID(path.Join(c.v.Roots[0], name, name+".vmx"))
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	guestFlag, guestValue, err := GuestOsParams(guestOS)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	// create a directory for the new instance
 	dir, _ := path.Split(vid.Path)
 	hostPath, err := PathFormat(c.v.Remote, dir)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	mkdirCommand := "mkdir " + hostPath
 	_, err = c.v.RemoteExec(mkdirCommand, nil)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	// use vmcli to create the VM instance
 	err = c.execCommand(name, fmt.Sprintf("vmcli VM Create -n %s -d %s %s %s", name, hostPath, guestFlag, guestValue), 1)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	vm, err := c.GetVM(name)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	return &vm, nil
 }
@@ -621,16 +621,16 @@ func (c *vmcli) Create(name, guestOS string) (*VM, error) {
 func (c *vmcli) diskPathnames(vm *VM, diskName string) (string, string, error) {
 	vmxPath, vmxFile := path.Split(vm.Path)
 	if !strings.HasSuffix(vmxFile, ".vmx") {
-		return "", "", fmt.Errorf("unexpected VM path: %s", vm.Path)
+		return "", "", Fatalf("unexpected VM path: %s", vm.Path)
 	}
 	if !strings.HasSuffix(diskName, ".vmdk") {
-		return "", "", fmt.Errorf("unexpected disk name: %s", diskName)
+		return "", "", Fatalf("unexpected disk name: %s", diskName)
 	}
 
 	diskPathname := path.Join(vmxPath, diskName)
 	hostPathname, err := PathnameFormat(c.v.Remote, diskPathname)
 	if err != nil {
-		return "", "", err
+		return "", "", Fatal(err)
 	}
 	return diskPathname, hostPathname, nil
 }
@@ -638,17 +638,17 @@ func (c *vmcli) diskPathnames(vm *VM, diskName string) (string, string, error) {
 func (c *vmcli) CreateDisk(vm *VM, diskName, size string, singleFile, preallocated bool) error {
 	err := c.DeleteDisk(vm, diskName)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	_, hostPathname, err := c.diskPathnames(vm, diskName)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	adapter := "lsilogic"
 	diskType := ParseDiskType(singleFile, preallocated)
 	err = c.execCommand(vm.Name, fmt.Sprintf("vmcli Disk Create -f %s -a %s -s %s -t %d", hostPathname, adapter, size, int(diskType)), 0)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }
@@ -658,7 +658,7 @@ func (c *vmcli) DeleteDisk(vm *VM, diskName string) error {
 
 	_, hostPathname, err := c.diskPathnames(vm, diskName)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	var command string
@@ -670,7 +670,7 @@ func (c *vmcli) DeleteDisk(vm *VM, diskName string) error {
 	}
 	err = c.execCommand(vm.Name, command, 0)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	return nil
 }

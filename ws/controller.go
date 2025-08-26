@@ -128,7 +128,7 @@ func isLocal() (bool, error) {
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	if host == remote {
 		return true, nil
@@ -142,7 +142,7 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 	}
 	olines, err := v.exec("ssh", append(v.sshArgs(), "env"), "", nil)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	for _, line := range olines {
 		if WINDOWS_ENV_PATTERN.MatchString(strings.ToUpper(line)) {
@@ -151,17 +151,16 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 	}
 	olines, err = v.exec("ssh", append(v.sshArgs(), "uname"), "", nil)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if len(olines) != 1 {
-		return "", fmt.Errorf("unexpected uname response: %v", olines)
+		return "", Fatalf("unexpected uname response: %v", olines)
 	}
 	return strings.ToLower(olines[0]), nil
 }
 
 func NewController() (Controller, error) {
 
-	ViperInit("vmx.")
 	ViperSetDefault("vmware_roots", []string{"/var/vmware"})
 	ViperSetDefault("iso_path", "/var/vmware/iso")
 	ViperSetDefault("certs_path", "/var/vmware/iso/certs")
@@ -175,7 +174,7 @@ func NewController() (Controller, error) {
 	ViperSetDefault("host", "localhost")
 	user, err := user.Current()
 	if err != nil {
-		return &vmctl{}, err
+		return &vmctl{}, Fatal(err)
 	}
 	ViperSetDefault("user", user.Username)
 
@@ -193,13 +192,13 @@ func NewController() (Controller, error) {
 	for i, root := range roots {
 		normalized, err := PathNormalize(os.ExpandEnv(root))
 		if err != nil {
-			return nil, err
+			return nil, Fatal(err)
 		}
 		v.Roots[i] = normalized
 	}
 	path, err := PathNormalize(os.ExpandEnv(ViperGetString("iso_path")))
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	v.IsoPath = path
 
@@ -208,7 +207,7 @@ func NewController() (Controller, error) {
 	v.Local = runtime.GOOS
 	local, err := isLocal()
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	if local {
 		v.Remote = v.Local
@@ -222,7 +221,7 @@ func NewController() (Controller, error) {
 		if ViperGetString("shell") == "winexec" {
 			w, err := NewWinExecClient()
 			if err != nil {
-				return nil, err
+				return nil, Fatal(err)
 			}
 			v.winexec = w
 			v.Shell = "winexec"
@@ -231,7 +230,7 @@ func NewController() (Controller, error) {
 			v.Shell = "ssh"
 			remote, err := v.detectRemoteOS()
 			if err != nil {
-				return nil, err
+				return nil, Fatal(err)
 			}
 			if v.debug {
 				log.Printf("detected remote os: %s\n", remote)
@@ -253,10 +252,10 @@ func (v *vmctl) Close() error {
 func (v *vmctl) requirePowerState(vm *VM, state, action string) error {
 	err := v.cli.QueryPowerState(vm)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if vm.PowerState != state {
-		return fmt.Errorf("Power state '%s' is required to %s", state, action)
+		return Fatalf("Power state '%s' is required to %s", state, action)
 	}
 	return nil
 }
@@ -267,11 +266,11 @@ func (v *vmctl) checkPowerState(vm *VM, command, state string) (bool, error) {
 	}
 	err := v.validatePowerState(state)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	err = v.cli.QueryPowerState(vm)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	if vm.PowerState == state {
 		log.Printf("[%s] ignoring %s in power state %s", vm.Name, command, vm.PowerState)
@@ -296,7 +295,7 @@ func (v *vmctl) setStretch(vm *VM, enabled bool) error {
 	if stretch != "" {
 		err := v.cli.SetParam(vm, "gui.EnableStretchGuest", stretch)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		if v.verbose {
 			fmt.Printf("[%s] display stretch %s\n", vm.Name, action)
@@ -313,7 +312,7 @@ func (v *vmctl) validatePowerState(state string) error {
 	case "on", "off", "paused", "suspended":
 		return nil
 	default:
-		return fmt.Errorf("unknown power state: %s", state)
+		return Fatalf("unknown power state: %s", state)
 	}
 }
 
@@ -321,11 +320,11 @@ func (v *vmctl) queryPowerState(vid string) (string, error) {
 	v.cli.Reset()
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	err = v.cli.QueryPowerState(&vm)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	return vm.PowerState, nil
 }
@@ -344,7 +343,7 @@ func (v *vmctl) Wait(vid, state string) error {
 	}
 	err := v.validatePowerState(state)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 
 	if v.verbose {
@@ -363,7 +362,7 @@ func (v *vmctl) Wait(vid, state string) error {
 			checkPower = false
 			vms, err := v.Show("", ShowOptions{Running: true})
 			if err != nil {
-				return err
+				return Fatal(err)
 			}
 			for _, vm := range *vms {
 				if vm.Name == vid {
@@ -376,7 +375,7 @@ func (v *vmctl) Wait(vid, state string) error {
 		if checkPower {
 			newState, err := v.queryPowerState(vid)
 			if err != nil {
-				return err
+				return Fatal(err)
 			}
 
 			if newState == state {
@@ -388,7 +387,7 @@ func (v *vmctl) Wait(vid, state string) error {
 		}
 		if timeout_seconds != 0 {
 			if time.Since(start) > timeout {
-				return fmt.Errorf("[%s] Timed out awaiting power state %s", vid, state)
+				return Fatalf("[%s] Timed out awaiting power state %s", vid, state)
 			}
 		}
 		time.Sleep(interval)
@@ -404,7 +403,7 @@ func (v *vmctl) Get(vid string) (VM, error) {
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return VM{}, err
+		return VM{}, Fatal(err)
 	}
 	return vm, nil
 }
@@ -413,12 +412,12 @@ func (v *vmctl) GetState(vid string) (*VMState, error) {
 
 	vm, err := v.Get(vid)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 
 	err = v.queryVM(&vm, QueryTypeState)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	state := VMState{
 		Name:       vm.Name,
@@ -437,104 +436,86 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 	}
 	vm, err := v.Get(vid)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	switch strings.ToLower(property) {
 	case "vmx":
 		data, err := v.ReadHostFile(&vm, vm.Name+".vmx")
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return string(data), nil
 
 	case "power", "powerstate":
 		err := v.cli.QueryPowerState(&vm)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return vm.PowerState, nil
 
 	case "ip", "ipaddress", "ipaddr":
 		err = v.getIpAddress(&vm)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return vm.IpAddress, nil
 
 	case "disk", "disks", "diskinfo", "disksize", "disksizemb", "diskcapacity":
 		disks, ok, err := v.getDisks(&vm)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		if !ok {
-			return "", fmt.Errorf("[%s] no disks found", vm.Name)
+			return "", Fatalf("[%s] no disks found", vm.Name)
 		}
-		if property == "disksize" || property == "disksizemb" {
+		switch strings.ToLower(property) {
+		case "disksize", "disksizemb":
 			return fmt.Sprintf("%v", vm.DiskSize), nil
-		}
-		if property == "diskcapacity" {
+		case "diskcapacity":
 			return fmt.Sprintf("%v", disks[0].Capacity), nil
+		case "disk":
+			return FormatJSON(disks[0]), nil
+		case "diskinfo":
+			return FormatJSON(disks), nil
+		default:
+			return "", Fatalf("[%s] unexpected property: %s", vm.Name, property)
 		}
-		if property == "disk" {
-			ret, err := FormatJSON(disks[0])
-			if err != nil {
-				return "", err
-			}
-			return ret, nil
-		}
-		ret, err := FormatJSON(disks)
-		if err != nil {
-			return "", err
-		}
-		return ret, nil
 
 	case "mac", "macaddr", "macaddress":
 		err := v.cli.GetMacAddress(&vm, nil)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
 		return vm.MacAddress, nil
 
 	case "state":
 		state, err := v.GetState(vid)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
-		ret, err := FormatJSON(state)
-		if err != nil {
-			return "", err
-		}
-		return ret, nil
+		return FormatJSON(state), nil
 	}
 
 	switch strings.ToLower(property) {
 	case "config":
 		err = v.queryVM(&vm, QueryTypeConfig)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
-		ret, err := FormatJSON(&vm)
-		if err != nil {
-			return "", err
-		}
-		return ret, nil
+		return FormatJSON(&vm), nil
 	case "all", "detail", "":
 		err := v.queryVM(&vm, QueryTypeAll)
 		if err != nil {
-			return "", err
+			return "", Fatal(err)
 		}
-		ret, err := FormatJSON(&vm)
-		if err != nil {
-			return "", err
-		}
-		return ret, nil
+		return FormatJSON(&vm), nil
 	}
 
 	// try property as a VM key
 	value, ok, err := v.queryVMProperty(&vm, property)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	if ok {
 		return value, nil
@@ -543,7 +524,7 @@ func (v *vmctl) GetProperty(vid, property string) (string, error) {
 	// try property as a VMX key
 	value, err = v.cli.GetParam(&vm, property)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	return value, nil
 }
@@ -555,11 +536,11 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 	if queryType == QueryTypeConfig || queryType == QueryTypeAll {
 		err := v.cli.GetConfig(vm)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		_, _, err = v.getDisks(vm)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	if queryType == QueryTypeState || queryType == QueryTypeAll {
@@ -569,15 +550,15 @@ func (v *vmctl) queryVM(vm *VM, queryType QueryType) error {
 				vm.Encrypted = true
 				return nil
 			}
-			return err
+			return Fatal(err)
 		}
 		err = v.cli.GetMacAddress(vm, nil)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		err = v.getIpAddress(vm)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	return nil
@@ -589,7 +570,7 @@ func (v *vmctl) mapVMKeys() error {
 	}
 	vmap, err := v.toMap(&VM{})
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	v.vmkey = make(map[string]string)
 	for k, _ := range vmap {
@@ -606,11 +587,11 @@ func (v *vmctl) toMap(vm *VM) (map[string]any, error) {
 	}
 	data, err := json.Marshal(vm)
 	if err != nil {
-		return vmap, err
+		return vmap, Fatal(err)
 	}
 	err = json.Unmarshal([]byte(data), &vmap)
 	if err != nil {
-		return vmap, err
+		return vmap, Fatal(err)
 	}
 	return vmap, nil
 }
@@ -627,19 +608,19 @@ func (v *vmctl) queryVMProperty(vm *VM, property string) (string, bool, error) {
 
 	err := v.queryVM(vm, QueryTypeAll)
 	if err != nil {
-		return "", false, err
+		return "", false, Fatal(err)
 	}
 
 	vmap, err := v.toMap(vm)
 	if err != nil {
-		return "", false, err
+		return "", false, Fatal(err)
 	}
 
 	value, ok := vmap[key]
 	if ok {
 		data, err := json.Marshal(value)
 		if err != nil {
-			return "", false, err
+			return "", false, Fatal(err)
 		}
 		return string(data), true, nil
 		//return fmt.Sprintf("%v", value), true, nil
@@ -654,7 +635,7 @@ func FormatVMXBool(value string) (string, error) {
 	case "false", "0", "f", "off", "no", "n", "disable", "disabled":
 		return "TRUE", nil
 	}
-	return "", fmt.Errorf("cannot format '%s' as boolean", value)
+	return "", Fatalf("cannot format '%s' as boolean", value)
 }
 
 func (v *vmctl) SetProperty(vid, property, value string) error {
@@ -663,7 +644,7 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 	}
 	vm, err := v.cli.GetVM(vid)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if v.verbose {
 		fmt.Printf("[%s] setting %s=%s\n", vm.Name, property, value)
@@ -677,16 +658,16 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 			property = key
 			switch property {
 			case "Id", "Path", "Name", "IpAddress":
-				return fmt.Errorf("Property '%s' is read-only", key)
+				return Fatalf("Property '%s' is read-only", key)
 
 			case "DiskSize":
-				return fmt.Errorf("Use host utility vmware-vdiskmanager to modify %s", key)
+				return Fatalf("Use host utility vmware-vdiskmanager to modify %s", key)
 
 			case "Running", "PowerState":
-				return fmt.Errorf("Use 'start', 'stop', or 'kill' to modify %s", key)
+				return Fatalf("Use 'start', 'stop', or 'kill' to modify %s", key)
 
 			case "MacAddress", "IsoFile", "IsoAttached", "IsoBootConnected", "SerialAttched", "SerialPipe", "VncEnabled", "VncPort", "FileShareEnabled", "ClipboardEnabled":
-				return fmt.Errorf("Use modify command to change %s", key)
+				return Fatalf("Use modify command to change %s", key)
 
 			case "CpuCount":
 				property = "numvcpus"
@@ -695,7 +676,7 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 				property = "memsize"
 				size, err := SizeParse(value)
 				if err != nil {
-					return err
+					return Fatal(err)
 				}
 				value = fmt.Sprintf("%d", size/MB)
 
@@ -709,12 +690,12 @@ func (v *vmctl) SetProperty(vid, property, value string) error {
 			err := v.requirePowerState(&vm, "off", fmt.Sprintf("modify '%s'", key))
 
 			if err != nil {
-				return err
+				return Fatal(err)
 			}
 		}
 		err = v.cli.SetParam(&vm, property, value)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 	}
 	return nil
@@ -726,12 +707,12 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 	}
 	path, err := PathnameFormat(v.Remote, vm.Path)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	var exitCode int
 	olines, err := v.RemoteExec("vmrun getGuestIpAddress "+path, &exitCode)
 	if err != nil {
-		return err
+		return Fatal(err)
 	}
 	if v.debug {
 		log.Printf("getIpAddress: exitCode: %d\n", exitCode)
@@ -746,7 +727,7 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 	if vm.IpAddress == "" && vm.MacAddress != "" {
 		addr, err := v.ArpQuery(vm)
 		if err != nil {
-			return err
+			return Fatal(err)
 		}
 		vm.IpAddress = addr
 	}
@@ -760,22 +741,22 @@ func (v *vmctl) getDisks(vm *VM) ([]VMDisk, bool, error) {
 	disks := []VMDisk{}
 	vmxData, err := v.ReadHostFile(vm, fmt.Sprintf("%s.vmx", vm.Name))
 	if err != nil {
-		return disks, false, err
+		return disks, false, Fatal(err)
 	}
 
 	var found bool
 	vmdks, err := ScanVMX(vmxData)
 	if err != nil {
-		return disks, false, err
+		return disks, false, Fatal(err)
 	}
 	for device, filename := range vmdks {
 		vmdkData, err := v.ReadHostFile(vm, filename)
 		if err != nil {
-			return disks, false, err
+			return disks, false, Fatal(err)
 		}
 		disk, err := NewVMDisk(device, filename, vmdkData)
 		if err != nil {
-			return disks, false, err
+			return disks, false, Fatal(err)
 		}
 		if !found {
 			vm.DiskSize = disk.Size

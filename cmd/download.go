@@ -73,5 +73,5 @@ TARGET/HOST_FILENAME
 }
 
 func init() {
-	rootCmd.AddCommand(downloadCmd)
+	CobraAddCommand(rootCmd, rootCmd, downloadCmd)
 }

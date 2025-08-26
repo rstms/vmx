@@ -86,7 +86,7 @@ to quickly create a Cobra application.`,
 }
 
 func init() {
-	rootCmd.AddCommand(startCmd)
+	CobraAddCommand(rootCmd, rootCmd, startCmd)
 	OptionSwitch(startCmd, "stretch", "", "enable stretched display")
 	OptionSwitch(startCmd, "no-stretch", "", "disable stretched display")
 	OptionSwitch(startCmd, "background", "", "start in background mode")

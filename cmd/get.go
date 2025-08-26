@@ -85,5 +85,5 @@ PREFIX may be provided with the 'vmx' property to filter the vmx file output
 }
 
 func init() {
-	rootCmd.AddCommand(getCmd)
+	CobraAddCommand(rootCmd, rootCmd, getCmd)
 }

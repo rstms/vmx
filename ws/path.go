@@ -23,11 +23,11 @@ var UNIX_FILE_LIST = regexp.MustCompile(`^\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+
 func PathCompare(first, second string) (bool, error) {
 	first, err := PathNormalize(first)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	second, err = PathNormalize(second)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	return first == second, nil
 }
@@ -40,7 +40,7 @@ func PathNormalize(inPath string) (string, error) {
 	//log.Printf("match: %d %v\n", len(match), match)
 	if len(match) == 3 {
 		if len(match[2]) == 0 || !strings.HasPrefix(match[2], "\\") {
-			return "", fmt.Errorf("PathNormalize parse failed: %s", inPath)
+			return "", Fatalf("PathNormalize parse failed: %s", inPath)
 		}
 		inPath = "\\" + string(match[1][0]) + match[2]
 	}
@@ -64,7 +64,7 @@ func PathFormat(os, inPath string) (string, error) {
 	}
 	inPath, err := PathnameFormat(os, inPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	inPath = strings.TrimRight(inPath, "/\\")
 	if debug {
@@ -79,7 +79,7 @@ func PathnameFormat(os, inPath string) (string, error) {
 	}
 	inPath, err := PathNormalize(inPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	switch os {
 	case "windows", "scp":
@@ -108,12 +108,12 @@ func PathToName(inPath string) (string, error) {
 	}
 	inPath, err := PathNormalize(inPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	_, filename := path.Split(inPath)
 	name, _, _ := strings.Cut(filename, ".")
 	if name == "" {
-		return "", fmt.Errorf("cannot parse name from: '%s'", inPath)
+		return "", Fatalf("cannot parse name from: '%s'", inPath)
 	}
 	if debug {
 		log.Printf("PathToName returning: %s\n", name)
@@ -137,7 +137,7 @@ func ParseFileList(os string, lines []string) ([]VMFile, error) {
 		if len(match) == 3 {
 			length, err := strconv.ParseUint(match[1], 10, 64)
 			if err != nil {
-				return []VMFile{}, err
+				return []VMFile{}, Fatal(err)
 			}
 			files = append(files, VMFile{Name: match[2], Length: length})
 		}
@@ -178,7 +178,7 @@ func PathChdirCommand(os string, inPath string) (string, error) {
 func IsIsoPath(inPath string) (bool, error) {
 	nPath, err := PathNormalize(inPath)
 	if err != nil {
-		return false, err
+		return false, Fatal(err)
 	}
 	ret := false
 	switch {
@@ -201,11 +201,11 @@ func FormatIsoPath(isoPath, subPath string) (string, error) {
 	}
 	nPath, err := PathNormalize(subPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	nIsoPath, err := PathNormalize(isoPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 
 	// reject `^/.*`
@@ -216,7 +216,7 @@ func FormatIsoPath(isoPath, subPath string) (string, error) {
 			}
 			return nPath, nil
 		}
-		return "", fmt.Errorf("ISO subpath is absolute: '%s'", subPath)
+		return "", Fatalf("ISO subpath is absolute: '%s'", subPath)
 	}
 	// remove `/$`
 	nPath = strings.TrimRight(nPath, "/")
@@ -244,18 +244,18 @@ func FormatIsoPathname(isoPath, subPath string) (string, error) {
 	}
 	n, err := PathNormalize(subPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	subPath = n
 	n, err = PathNormalize(isoPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	isoPath = n
 
 	dir, file := path.Split(subPath)
 	if file == "" {
-		return "", fmt.Errorf("missing filename in: '%s'", subPath)
+		return "", Fatalf("missing filename in: '%s'", subPath)
 	}
 	//log.Printf("isoPath=%s subPath=%s dir=%s file=%s\n", isoPath, subPath, dir, file)
 	if strings.HasPrefix(dir, "iso/") {

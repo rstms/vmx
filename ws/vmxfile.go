@@ -54,7 +54,7 @@ func InitVMX(os, name string, data []byte) (*VMX, error) {
 	vmx := newVMX(os, name)
 	err := vmx.Write(data)
 	if err != nil {
-		return nil, err
+		return nil, Fatal(err)
 	}
 	return &vmx, nil
 }
@@ -68,7 +68,7 @@ func GuestOsParams(key string) (string, string, error) {
 		log.Printf("custom guest os: '%s'\n", guest)
 	}
 	if len(guest) == 0 {
-		return "", "", fmt.Errorf("null guest os value: %s", key)
+		return "", "", Fatalf("null guest os value: %s", key)
 	}
 	return flag, guest, nil
 }
@@ -78,16 +78,16 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	actions := []string{}
 
 	if options == nil {
-		return actions, fmt.Errorf("missing CreateOptions")
+		return actions, Fatalf("missing CreateOptions")
 	}
 	if isoOptions == nil {
-		return actions, fmt.Errorf("missing IsoOptions")
+		return actions, Fatalf("missing IsoOptions")
 	}
 
 	if options.ModifyName {
 		action, err := v.SetName(options.Name)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -95,7 +95,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyCpu {
 		action, err := v.SetCpu(options.CpuCount)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -104,7 +104,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 		action, err := v.SetMemory(options.MemorySize)
 
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -112,7 +112,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyDisk {
 		action, err := v.SetDisk(options.DiskName)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -120,7 +120,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyFloppy {
 		action, err := v.SetFloppy(false)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -128,7 +128,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyEFI {
 		action, err := v.SetEFI(options.EFIBoot)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -136,7 +136,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if isoOptions.ModifyISO {
 		action, err := v.SetISO(isoOptions)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -144,7 +144,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyNIC {
 		action, err := v.SetEthernet(options.MacAddress)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -152,7 +152,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyTTY {
 		action, err := v.SetSerial(options.SerialPipe, options.SerialClient, options.SerialV2V)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -160,7 +160,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyVNC {
 		action, err := v.SetVNC(options.VNCEnabled, options.VNCPort)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -168,7 +168,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyClipboard {
 		action, err := v.SetClipboard(options.ClipboardEnabled)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -176,7 +176,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyShare {
 		action, err := v.SetFileShare(options.FileShareEnabled, options.SharedHostPath, options.SharedGuestPath)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -184,7 +184,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyTimeSync {
 		action, err := v.SetTimeSync(options.HostTimeSync)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -192,7 +192,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	if options.ModifyTimeZone {
 		action, err := v.SetGuestTimeZone(options.GuestTimeZone)
 		if err != nil {
-			return actions, err
+			return actions, Fatal(err)
 		}
 		actions = append(actions, action)
 	}
@@ -275,7 +275,7 @@ func (v *VMX) SetMemory(memorySize string) (string, error) {
 	v.removePrefix("memory.maxsize =")
 	size, err := SizeParse(memorySize)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	v.addLine(fmt.Sprintf(`memsize = "%d"`, size/MB))
 
@@ -303,7 +303,7 @@ func (v *VMX) SetFloppy(enabled bool) (string, error) {
 	}
 	v.removePrefix("floppy0")
 	if enabled {
-		return "", fmt.Errorf("unsupported: floppy enable: '%v'", enabled)
+		return "", Fatalf("unsupported: floppy enable: '%v'", enabled)
 	}
 	v.lines = append(v.lines, `floppy0.present = "FALSE"`)
 	return "Disabled floppy device", nil
@@ -363,11 +363,11 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 
 	normalized, err := PathNormalize(options.IsoFile)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	hostPath, err := PathFormat(v.hostOS, normalized)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	v.addLine(`ide1:0.fileName = "` + hostPath + `"`)
 	var atBoot string
@@ -405,7 +405,7 @@ func (v *VMX) SetEthernet(mac string) (string, error) {
 		return fmt.Sprintf("Set MAC address: %s", mac), nil
 	}
 
-	return "", fmt.Errorf("invalid MAC address: '%s'", mac)
+	return "", Fatalf("invalid MAC address: '%s'", mac)
 
 }
 
@@ -424,7 +424,7 @@ func (v *VMX) SetSerial(pipe string, isClient, isV2V bool) (string, error) {
 
 	normalized, err := PathNormalize(pipe)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	hostPipe := normalized
 
@@ -439,7 +439,7 @@ func (v *VMX) SetSerial(pipe string, isClient, isV2V bool) (string, error) {
 		}
 		if strings.HasPrefix(normalized, "pipe/") {
 			if len(normalized) <= 5 {
-				return "", fmt.Errorf("invalid named pipe format: '%s'", pipe)
+				return "", Fatalf("invalid named pipe format: '%s'", pipe)
 			}
 			normalized = normalized[5:]
 		}
@@ -529,16 +529,16 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 
 	formatted, err := PathnameFormat(v.hostOS, hostPath)
 	if err != nil {
-		return "", err
+		return "", Fatal(err)
 	}
 	hostPath = formatted
 
 	if hostPath == "" {
-		return "", fmt.Errorf("missing filesystem share host path")
+		return "", Fatalf("missing filesystem share host path")
 	}
 
 	if guestPath == "" {
-		return "", fmt.Errorf("missing filesystem share guest path")
+		return "", Fatalf("missing filesystem share guest path")
 	}
 
 	v.addLine(`isolation.tools.hgfs.disable = "FALSE"`)

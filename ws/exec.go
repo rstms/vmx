@@ -40,7 +40,7 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	case "winexec":
 		stdout, _, err := v.winexec.Exec("cmd", []string{"/c", command}, exitCode)
 		if err != nil {
-			return []string{}, err
+			return []string{}, Fatal(err)
 		}
 		return strings.Split(strings.TrimSpace(stdout), "\n"), nil
 	case "ssh":
@@ -55,7 +55,7 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	case "cmd":
 		return v.exec(v.Shell, []string{"/c", command}, "", exitCode)
 	}
-	return []string{}, fmt.Errorf("unexpected shell: %s", v.Shell)
+	return []string{}, Fatalf("unexpected shell: %s", v.Shell)
 }
 
 func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
@@ -72,13 +72,13 @@ func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
 			command = ""
 		}
 		_, err := v.exec(v.Shell, args, command, exitCode)
-		return err
+		return Fatal(err)
 	case "sh":
 		return v.spawn("/bin/sh", command, exitCode)
 	case "cmd":
 		return v.spawn("cmd", command, exitCode)
 	}
-	return fmt.Errorf("unexpected shell: %s", v.Shell)
+	return Fatalf("unexpected shell: %s", v.Shell)
 }
 
 func (v *vmctl) spawn(shell, command string, exitCode *int) error {
@@ -108,7 +108,7 @@ func (v *vmctl) spawn(shell, command string, exitCode *int) error {
 		}
 	case *exec.ExitError:
 		if exitCode == nil {
-			err = fmt.Errorf("Process '%s' exited %d", cmd, e.ProcessState.ExitCode())
+			err = Fatalf("Process '%s' exited %d", cmd, e.ProcessState.ExitCode())
 		} else {
 			*exitCode = e.ProcessState.ExitCode()
 			log.Printf("WARNING: process '%s' exited %d\n", cmd, *exitCode)
@@ -159,7 +159,7 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 		}
 	case *exec.ExitError:
 		if exitCode == nil {
-			err = fmt.Errorf("Process '%s' exited %d\n%s", cmd, e.ProcessState.ExitCode(), stderr.String())
+			err = Fatalf("Process '%s' exited %d\n%s", cmd, e.ProcessState.ExitCode(), stderr.String())
 		} else {
 			*exitCode = e.ProcessState.ExitCode()
 			log.Printf("WARNING: process '%s' exited %d\n%s", cmd, *exitCode, stderr.String())
