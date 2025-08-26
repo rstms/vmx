@@ -5,9 +5,8 @@ import (
 )
 
 type WinExecClient struct {
-	api     *APIClient
-	debug   bool
-	verbose bool
+	api   *APIClient
+	debug bool
 }
 
 type WinExecRequest struct {
@@ -25,20 +24,31 @@ type WinExecResponse struct {
 
 func NewWinExecClient() (*WinExecClient, error) {
 
-	url := ViperGetString("winexec.url")
-	cert := ViperGetString("winexec.cert")
-	key := ViperGetString("winexec.key")
-	ca := ViperGetString("winexec.ca")
+	url := ViperGetString("winexec.client.url")
+	cert := ViperGetString("winexec.client.cert")
+	key := ViperGetString("winexec.client.key")
+	ca := ViperGetString("winexec.client.ca")
+	clientDebug := ViperGetString("winexec.client.debug")
+
+	if ViperGetBool("verbose") {
+		log.Printf("NewWinExecClient: %s\n", FormatJSON(&map[string]any{
+			"url":   url,
+			"cert":  cert,
+			"key":   key,
+			"ca":    ca,
+			"debug": clientDebug,
+		}))
+	}
 
 	api, err := NewAPIClient(url, cert, key, ca, nil)
 	if err != nil {
 		return nil, Fatal(err)
 	}
 	client := WinExecClient{
-		api:     api,
-		debug:   ViperGetBool("winexec.debug"),
-		verbose: ViperGetBool("winexec.verbose"),
+		api:   api,
+		debug: ViperGetBool("winexec.client.debug"),
 	}
+
 	return &client, nil
 
 }
@@ -49,14 +59,14 @@ func (w *WinExecClient) Spawn(command string, exitCode *int) error {
 	}
 	request := WinExecRequest{Command: command}
 	var response WinExecResponse
-	if w.verbose {
+	if w.debug {
 		log.Printf("winexec spawn request: %+v\n", request)
 	}
 	_, err := w.api.Post("/spawn/", &request, &response, nil)
 	if err != nil {
 		return Fatal(err)
 	}
-	if w.verbose {
+	if w.debug {
 		log.Printf("winexec spawn response: %+v\n", response)
 	}
 	if !response.Success {
@@ -76,14 +86,14 @@ func (w *WinExecClient) Exec(command string, args []string, exitCode *int) (stri
 	}
 	request := WinExecRequest{Command: command, Args: args}
 	var response WinExecResponse
-	if w.verbose {
+	if w.debug {
 		log.Printf("winexec exec request: %+v\n", request)
 	}
 	_, err := w.api.Post("/exec/", &request, &response, nil)
 	if err != nil {
 		return "", "", Fatal(err)
 	}
-	if w.verbose {
+	if w.debug {
 		log.Printf("winexec exec response: %+v\n", response)
 	}
 	if !response.Success {
