@@ -6,7 +6,7 @@ go_version = go1.24.5
 
 latest_release != gh release list --json tagName --jq '.[0].tagName' | tr -d v
 version != cat VERSION
-rstms_modules = $(shell awk <go.mod '/^module/{next} /rstms/{print $$1}')
+rstms_modules != awk <go.mod '/^module/{next} /rstms/{print $$1}'
 latest_module_release = $(shell gh --repo $(1) release list --json tagName --jq '.[0].tagName')
 gitclean = $(if $(shell git status --porcelain),$(error git status is dirty),$(info git status is clean))
 
