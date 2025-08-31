@@ -94,7 +94,7 @@ func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname str
 		return Fatal(err)
 	}
 
-	local, err := isLocal()
+	local, err := v.isLocal()
 	if err != nil {
 		return Fatal(err)
 	}
@@ -138,7 +138,7 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 	if err != nil {
 		return Fatal(err)
 	}
-	local, err := isLocal()
+	local, err := v.isLocal()
 	if err != nil {
 		return Fatal(err)
 	}

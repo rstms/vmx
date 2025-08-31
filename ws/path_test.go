@@ -122,7 +122,7 @@ func TestFileListUnix(t *testing.T) {
 	viper.Set("verbose", true)
 	viper.Set("relay", "")
 	viper.Set("hostname", "localhost")
-	v, err := NewController()
+	v, err := NewController("")
 	require.Nil(t, err)
 	vmx := v.(*vmctl)
 	require.IsType(t, &vmctl{}, vmx)

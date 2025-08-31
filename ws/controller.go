@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/rstms/winexec/client"
 	"log"
 	"os"
 	"os/user"
@@ -17,6 +18,9 @@ const Version = "0.1.13"
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
 var ENCRYPTED_VM_ERROR = regexp.MustCompile(`Something went wrong while getting password from stdin`)
 var NONEXISTENT_VM_ERROR = regexp.MustCompile(`VMX : '[^']*' does not exist!`)
+
+const DEFAULT_INTERVAL_SECONDS = 3
+const DEFAULT_TIMEOUT_SECONDS = 300
 
 type VID struct {
 	Id   string
@@ -104,34 +108,41 @@ type Controller interface {
 }
 
 type vmctl struct {
-	Hostname string
-	Username string
-	KeyFile  string
-	Roots    []string
-	IsoPath  string
-	winexec  *WinExecClient
-	cli      *vmcli
-	Shell    string
-	Local    string
-	Remote   string
-	debug    bool
-	verbose  bool
-	Version  string
-	vmkey    map[string]string
+	Hostname        string
+	Username        string
+	KeyFile         string
+	Roots           []string
+	IsoPath         string
+	winexec         *client.Client
+	cli             *vmcli
+	Shell           string
+	Local           string
+	Remote          string
+	debug           bool
+	verbose         bool
+	Version         string
+	vmkey           map[string]string
+	IntervalSeconds int64
+	TimeoutSeconds  int64
 }
 
 // return true if VMWare Workstation Host is localhost
-func isLocal() (bool, error) {
-	remote := ViperGetString("host")
-	if remote == "" || remote == "localhost" || remote == "127.0.0.1" {
+func (v *vmctl) isLocal() (bool, error) {
+	if v.Hostname == "" || v.Hostname == "localhost" || v.Hostname == "127.0.0.1" {
 		return true, nil
 	}
-	host, err := os.Hostname()
+	fqdn, err := os.Hostname()
 	if err != nil {
 		return false, Fatal(err)
 	}
-	if host == remote {
+	if v.Hostname == fqdn {
 		return true, nil
+	}
+	host, _, ok := strings.Cut(fqdn, ".")
+	if ok {
+		if v.Hostname == host {
+			return true, nil
+		}
 	}
 	return false, nil
 }
@@ -161,42 +172,54 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 
 func NewController() (Controller, error) {
 
-	ViperSetDefault("vmware_roots", []string{"/var/vmware"})
-	ViperSetDefault("iso_path", "/var/vmware/iso")
-	ViperSetDefault("certs_path", "/var/vmware/iso/certs")
-	ViperSetDefault("disable_keepalives", true)
-	ViperSetDefault("idle_conn_timeout", 5)
-	ViperSetDefault("iso_download.command", "curl --location --silent")
-	ViperSetDefault("iso_download.ca_flag", "--cacert")
-	ViperSetDefault("iso_download.client_cert_flag", "--cert")
-	ViperSetDefault("iso_download.client_key_flag", "--key")
-	ViperSetDefault("iso_download.filename_flag", "--output")
-	ViperSetDefault("host", "localhost")
+	var prefix string
+	if ProgramName() != "vmx" {
+		prefix = "vmx."
+	}
+
+	/*
+		userConfigPath, err := os.UserConfigDir()
+		if err != nil {
+			return nil, Fatal(err)
+		}
+	*/
+
 	user, err := user.Current()
 	if err != nil {
-		return &vmctl{}, Fatal(err)
+		return nil, Fatal(err)
 	}
-	ViperSetDefault("user", user.Username)
+
+	//configPath := filepath.Join(userConfigPath, ProgramName())
+
+	ViperSetDefault(prefix+"host", "localhost")
+	ViperSetDefault(prefix+"vmware_roots", []string{"/var/vmware"})
+	ViperSetDefault(prefix+"iso_path", "/var/vmware/iso")
+	ViperSetDefault(prefix+"disable_keepalives", true)
+	ViperSetDefault(prefix+"interval_seconds", DEFAULT_INTERVAL_SECONDS)
+	ViperSetDefault(prefix+"timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+	ViperSetDefault(prefix+"user", user.Username)
 
 	v := vmctl{
-		Hostname: ViperGetString("host"),
-		Username: ViperGetString("user"),
-		KeyFile:  os.ExpandEnv(ViperGetString("ssh_key")),
-		verbose:  ViperGetBool("verbose"),
-		debug:    ViperGetBool("debug"),
-		Version:  Version,
+		Hostname:        ViperGetString(prefix + "host"),
+		Username:        ViperGetString(prefix + "user"),
+		KeyFile:         ViperGetString(prefix + "ssh_key"),
+		verbose:         ViperGetBool("verbose"),
+		debug:           ViperGetBool("debug"),
+		Version:         Version,
+		IntervalSeconds: ViperGetInt64(prefix + "interval_seconds"),
+		TimeoutSeconds:  ViperGetInt64(prefix + "timeout_seconds"),
 	}
 
-	roots := ViperGetStringSlice("vmware_roots")
+	roots := ViperGetStringSlice(prefix + "vmware_roots")
 	v.Roots = make([]string, len(roots))
 	for i, root := range roots {
-		normalized, err := PathNormalize(os.ExpandEnv(root))
+		normalized, err := PathNormalize(root)
 		if err != nil {
 			return nil, Fatal(err)
 		}
 		v.Roots[i] = normalized
 	}
-	path, err := PathNormalize(os.ExpandEnv(ViperGetString("iso_path")))
+	path, err := PathNormalize(ViperGetString(prefix + "iso_path"))
 	if err != nil {
 		return nil, Fatal(err)
 	}
@@ -205,7 +228,7 @@ func NewController() (Controller, error) {
 	v.cli = NewCliClient(&v)
 
 	v.Local = runtime.GOOS
-	local, err := isLocal()
+	local, err := v.isLocal()
 	if err != nil {
 		return nil, Fatal(err)
 	}
@@ -218,8 +241,8 @@ func NewController() (Controller, error) {
 			v.Shell = "sh"
 		}
 	} else {
-		if ViperGetString("shell") == "winexec" {
-			w, err := NewWinExecClient()
+		if ViperGetString(prefix+"shell") == "winexec" {
+			w, err := client.NewClient()
 			if err != nil {
 				return nil, Fatal(err)
 			}
@@ -350,10 +373,8 @@ func (v *vmctl) Wait(vid, state string) error {
 		fmt.Printf("[%s] Awaiting power state: %s\n", vid, state)
 	}
 	start := time.Now()
-	interval_seconds := ViperGetInt64("interval")
-	interval := time.Duration(interval_seconds) * time.Second
-	timeout_seconds := ViperGetInt64("timeout")
-	timeout := time.Duration(timeout_seconds) * time.Second
+	interval := time.Duration(v.IntervalSeconds) * time.Second
+	timeout := time.Duration(v.TimeoutSeconds) * time.Second
 	checkPower := true
 	running := false
 	for {
@@ -385,7 +406,7 @@ func (v *vmctl) Wait(vid, state string) error {
 				return nil
 			}
 		}
-		if timeout_seconds != 0 {
+		if v.TimeoutSeconds != 0 {
 			if time.Since(start) > timeout {
 				return Fatalf("[%s] Timed out awaiting power state %s", vid, state)
 			}
