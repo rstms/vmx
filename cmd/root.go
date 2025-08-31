@@ -111,7 +111,7 @@ func init() {
 }
 
 func InitController() {
-	c, err := ws.NewController()
+	c, err := ws.NewVMXController()
 	cobra.CheckErr(err)
 	if ViperGetBool("verbose") {
 		log.Printf("Controller: %s\n", FormatJSON(c))

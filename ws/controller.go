@@ -113,7 +113,7 @@ type vmctl struct {
 	KeyFile         string
 	Roots           []string
 	IsoPath         string
-	winexec         *client.Client
+	winexec         *client.WinexecClient
 	cli             *vmcli
 	Shell           string
 	Local           string
@@ -170,7 +170,7 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 	return strings.ToLower(olines[0]), nil
 }
 
-func NewController() (Controller, error) {
+func NewVMXController() (Controller, error) {
 
 	var prefix string
 	if ProgramName() != "vmx" {
@@ -242,7 +242,7 @@ func NewController() (Controller, error) {
 		}
 	} else {
 		if ViperGetString(prefix+"shell") == "winexec" {
-			w, err := client.NewClient()
+			w, err := client.NewWinexecClient()
 			if err != nil {
 				return nil, Fatal(err)
 			}
