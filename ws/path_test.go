@@ -7,28 +7,26 @@ import (
 	"github.com/stretchr/testify/require"
 	"log"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func dumpConfig(t *testing.T) {
 	filename := viper.ConfigFileUsed()
-	fmt.Printf("configFileUsed: %s\n", filename)
+	log.Printf("configFileUsed: %s\n", filename)
 	dir, err := os.Getwd()
 	require.Nil(t, err)
-	fmt.Printf("current directory: %s\n", dir)
+	log.Printf("current directory: %s\n", dir)
 	var buf bytes.Buffer
 	err = viper.WriteConfigTo(&buf)
 	require.Nil(t, err)
-	fmt.Println(buf.String())
+	log.Println(buf.String())
 }
 
 func initTestConfig(t *testing.T) {
-
-	viper.SetConfigFile("testdata/config.yaml")
-	err := viper.ReadInConfig()
-	require.Nil(t, err)
-	viper.Set("debug", true)
-	viper.Set("vmx.debug", true)
+	testFile := filepath.Join("testdata", "config.yaml")
+	Init("test", Version, testFile)
+	ViperSet("debug", true)
 }
 
 func TestPathToName(t *testing.T) {

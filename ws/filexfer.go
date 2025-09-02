@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -106,14 +105,25 @@ func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname str
 		return v.copyFile(localDest, localSource)
 	}
 
-	sourcePath, err := PathnameFormat("scp", remoteSourcePathname)
+	remoteSource, err := PathnameFormat(v.Remote, remoteSourcePathname)
 	if err != nil {
 		return Fatal(err)
 	}
-	remoteSource := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, sourcePath)
-	args := []string{"-i", v.KeyFile, remoteSource, localDest}
-	_, err = v.exec("scp", args, "", nil)
-	return Fatal(err)
+	switch v.Shell {
+	case "winexec":
+		err = v.winexec.Download(localDest, remoteSource)
+		if err != nil {
+			return Fatal(err)
+		}
+	case "ssh":
+		err = v.scpDownload(localDest, remoteSource)
+		if err != nil {
+			return Fatal(err)
+		}
+	default:
+		return Fatalf("unexpected shell: %s", v.Shell)
+	}
+	return nil
 }
 
 func (v *vmctl) Upload(vid, localSourcePathname, vmDirFilename string) error {
@@ -150,12 +160,24 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 		return v.copyFile(localDest, localSource)
 	}
 
-	remoteDest, err := PathnameFormat("scp", remoteDestPathname)
+	remoteDest, err := PathnameFormat(v.Remote, remoteDestPathname)
 	if err != nil {
 		return Fatal(err)
 	}
-	remoteTarget := fmt.Sprintf("%s@%s:%s", v.Username, v.Hostname, remoteDest)
-	args := []string{"-i", v.KeyFile, localSource, remoteTarget}
-	_, err = v.exec("scp", args, "", nil)
-	return Fatal(err)
+
+	switch v.Shell {
+	case "winexec":
+		err = v.winexec.Upload(remoteDest, localSource, false)
+		if err != nil {
+			return Fatal(err)
+		}
+	case "ssh":
+		err = v.scpUpload(remoteDest, localSource)
+		if err != nil {
+			return Fatal(err)
+		}
+	default:
+		return Fatalf("unexpected shell: %s", v.Shell)
+	}
+	return nil
 }

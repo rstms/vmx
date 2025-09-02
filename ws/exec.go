@@ -169,3 +169,21 @@ func (v *vmctl) exec(command string, args []string, stdin string, exitCode *int)
 
 	return olines, err
 }
+
+func (v *vmctl) scpUpload(remoteDest, localSource string) error {
+	args := []string{"-i", v.KeyFile, localSource, v.Username + "@" + v.Hostname + ":" + remoteDest}
+	_, err := v.exec("scp", args, "", nil)
+	if err != nil {
+		return Fatal(err)
+	}
+	return nil
+}
+
+func (v *vmctl) scpDownload(localDest, remoteSource string) error {
+	args := []string{"-i", v.KeyFile, v.Username + "@" + v.Hostname + ":" + remoteSource, localDest}
+	_, err := v.exec("scp", args, "", nil)
+	if err != nil {
+		return Fatal(err)
+	}
+	return nil
+}

@@ -177,19 +177,10 @@ func NewVMXController() (Controller, error) {
 		prefix = "vmx."
 	}
 
-	/*
-		userConfigPath, err := os.UserConfigDir()
-		if err != nil {
-			return nil, Fatal(err)
-		}
-	*/
-
 	user, err := user.Current()
 	if err != nil {
 		return nil, Fatal(err)
 	}
-
-	//configPath := filepath.Join(userConfigPath, ProgramName())
 
 	ViperSetDefault(prefix+"host", "localhost")
 	ViperSetDefault(prefix+"vmware_roots", []string{"/var/vmware"})
@@ -241,15 +232,16 @@ func NewVMXController() (Controller, error) {
 			v.Shell = "sh"
 		}
 	} else {
-		if ViperGetString(prefix+"shell") == "winexec" {
+		v.Shell = ViperGetString(prefix + "shell")
+		switch v.Shell {
+		case "winexec":
 			w, err := client.NewWinexecClient()
 			if err != nil {
 				return nil, Fatal(err)
 			}
 			v.winexec = w
-			v.Shell = "winexec"
 			v.Remote = "windows"
-		} else {
+		case "ssh":
 			v.Shell = "ssh"
 			remote, err := v.detectRemoteOS()
 			if err != nil {

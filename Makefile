@@ -59,3 +59,6 @@ sterile: clean
 	go clean -cache || true
 	go clean -modcache || true
 	rm -f go.mod go.sum
+
+certs:
+	scripts/generate_certs

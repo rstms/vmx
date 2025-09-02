@@ -3,8 +3,8 @@ module github.com/rstms/vmx
 go 1.24.5
 
 require (
-	github.com/rstms/go-common v0.2.22
-	github.com/rstms/winexec v1.1.6
+	github.com/rstms/go-common v0.2.23
+	github.com/rstms/winexec v1.1.16
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.0

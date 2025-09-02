@@ -46,10 +46,16 @@ github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZV
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/rstms/go-common v0.2.22 h1:1u7FNpJha6qhbzmVXGb10X1m+P8nhTuAWAi9NlW879Y=
 github.com/rstms/go-common v0.2.22/go.mod h1:X+YExXFyL7HOZwV8fB3VCqfehcBe2IqSaKzsacJQjb0=
+github.com/rstms/go-common v0.2.23 h1:KKDwLtUmmRek6yXxYkvJFtO7iM/OaH2ONomdtxfqnFQ=
+github.com/rstms/go-common v0.2.23/go.mod h1:X+YExXFyL7HOZwV8fB3VCqfehcBe2IqSaKzsacJQjb0=
 github.com/rstms/winexec v1.1.5 h1:Iq6Fwl5V0wNHFr+bTO1TTNdB0WBS8UNo+oU6uSyvAzY=
 github.com/rstms/winexec v1.1.5/go.mod h1:2mXqR8uM48ggtV0rA/N02T/+ZpVhOjfNsrX4SG1jrnU=
 github.com/rstms/winexec v1.1.6 h1:6GxclQfFa43UQXM2wP24uR53Xe8q/quDLgSzHQfZ7OM=
 github.com/rstms/winexec v1.1.6/go.mod h1:2mXqR8uM48ggtV0rA/N02T/+ZpVhOjfNsrX4SG1jrnU=
+github.com/rstms/winexec v1.1.15 h1:XfrNmbs4KhzeKO2rtDs6a6nsUMQa/nVzrp3i3W+Z51s=
+github.com/rstms/winexec v1.1.15/go.mod h1:2l0DQ0cbnQIsvh4qibLgC0C9qZRio7vNNXnxRlvlYIY=
+github.com/rstms/winexec v1.1.16 h1:S6W6LEQDxAsTAsr6uhkUENGSL5kCH28Tnh+g8HsEL+I=
+github.com/rstms/winexec v1.1.16/go.mod h1:2l0DQ0cbnQIsvh4qibLgC0C9qZRio7vNNXnxRlvlYIY=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sagikazarmark/locafero v0.7.0 h1:5MqpDsTGNDhY8sGp0Aowyf0qKsPrhewaLSsFaodPcyo=
 github.com/sagikazarmark/locafero v0.7.0/go.mod h1:2za3Cg5rMaTMoG/2Ulr9AwtFaIppKXTRYnozin4aB5k=

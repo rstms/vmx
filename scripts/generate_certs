@@ -1,0 +1,10 @@
+#!/bin/sh
+program=$(basename $(pwd))
+dir=$HOME/.config/$program
+mkdir -p $dir
+echo updating certificates in $dir
+(
+    cd $dir
+    mkcert --force --chain ca.pem
+    mkcert --force vmx --cert-file client_cert.pem --key-file client_key.pem --duration 1d
+)
