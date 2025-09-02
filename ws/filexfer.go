@@ -167,7 +167,7 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 
 	switch v.Shell {
 	case "winexec":
-		err = v.winexec.Upload(remoteDest, localSource, false)
+		err = v.winexec.Upload(remoteDest, localSource, true)
 		if err != nil {
 			return Fatal(err)
 		}
