@@ -254,6 +254,13 @@ func NewVMXController() (Controller, error) {
 		}
 	}
 	v.mapVMKeys()
+	if v.debug {
+		local, err := v.isLocal()
+		if err != nil {
+			return nil, Fatal(err)
+		}
+		log.Printf("isLocal=%v shell=%s local=%s remote=%s\n", local, v.Shell, v.Local, v.Remote)
+	}
 	return &v, nil
 }
 
