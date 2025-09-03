@@ -54,7 +54,6 @@ func (v *vmctl) copyFile(dstPath, srcPath string) error {
 	if v.debug {
 		log.Printf("copyFile(%s, %s)\n", dstPath, srcPath)
 	}
-
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		return Fatal(err)
@@ -66,8 +65,10 @@ func (v *vmctl) copyFile(dstPath, srcPath string) error {
 	}
 	defer src.Close()
 	_, err = io.Copy(dst, src)
-	return Fatal(err)
-
+	if err != nil {
+		return Fatal(err)
+	}
+	return nil
 }
 
 func (v *vmctl) Download(vid string, localDestPathname, vmDirFilename string) error {
@@ -102,7 +103,11 @@ func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname str
 		if err != nil {
 			return Fatal(err)
 		}
-		return v.copyFile(localDest, localSource)
+		err = v.copyFile(localDest, localSource)
+		if err != nil {
+			return Fatal(err)
+		}
+		return nil
 	}
 
 	remoteSource, err := PathnameFormat(v.Remote, remoteSourcePathname)
@@ -157,7 +162,11 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 		if err != nil {
 			return Fatal(err)
 		}
-		return v.copyFile(localDest, localSource)
+		err = v.copyFile(localDest, localSource)
+		if err != nil {
+			return Fatal(err)
+		}
+		return nil
 	}
 
 	remoteDest, err := PathnameFormat(v.Remote, remoteDestPathname)
