@@ -30,7 +30,7 @@ func (v *vmctl) CheckISODownload(vm *VM, options *IsoOptions) error {
 		if err != nil {
 			return Fatal(err)
 		}
-		err = v.winexec.GetISO(vmxFilename, url, options.IsoCA, options.IsoClientCert, options.IsoClientKey)
+		err = v.winexec.GetISO(vmxFilename, url, options.IsoCA, options.IsoClientCert, options.IsoClientKey, nil)
 		if err != nil {
 			return Fatal(err)
 		}
