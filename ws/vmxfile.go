@@ -11,6 +11,7 @@ var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
 var ISO_FILENAME_PATTERN = regexp.MustCompile(`^ide1:0\.fileName = "([^"]*)"`)
 var ISO_PRESENT_PATTERN = regexp.MustCompile(`^ide1:0\.present = "([^"]*)"`)
+var USB_ID_PATTERN = regexp.MustCompile(`^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$`)
 
 // OS names generated using the error message from this command:
 // 'vmcli VM create -n notavalidname -d /notavaliddir -g notavalidosname
@@ -135,6 +136,14 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 
 	if isoOptions.ModifyISO {
 		action, err := v.SetISO(isoOptions)
+		if err != nil {
+			return actions, Fatal(err)
+		}
+		actions = append(actions, action)
+	}
+
+	if options.ModifyUSB {
+		action, err := v.SetUSB(options)
 		if err != nil {
 			return actions, Fatal(err)
 		}
@@ -571,4 +580,42 @@ func (v *VMX) SetTimeSync(enable bool) (string, error) {
 	v.addLine(`time.synchronize.shrink = "TRUE"`)
 	v.addLine(`time.synchronize.tools.startup = "TRUE"`)
 	return "Enabled host time sync", nil
+}
+
+func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
+	if v.debug {
+		log.Printf("SetUSB: %s\n", FormatJSON(*options))
+	}
+
+	v.removePrefix("usb.generic.allow")
+	v.removePrefix("usb.autoConnect")
+	v.removePrefix("usb.quirks")
+
+	if options.AllowHID {
+		v.addLine(`usb.generic.allowHID = "TRUE"`)
+	}
+	if options.AllowCCID {
+		v.addLine(`usb.generic.allowCCID = "TRUE"`)
+	}
+
+	devices := map[string]string{
+		"device0": options.Device0,
+		"device1": options.Device1,
+	}
+	for label, ids := range devices {
+
+		if ids != "" {
+			if !USB_ID_PATTERN.MatchString(ids) {
+				return "", Fatalf("unexpected format: USB %s: %s", label, ids)
+			}
+			vid, pid, ok := strings.Cut(ids, ":")
+			if !ok {
+				return "", Fatalf("failed parsing USB %s: %s", label, ids)
+			}
+			v.addLine(fmt.Sprintf(`usb.quirks.%s = "0x%s:0x%s allow"`, label, vid, pid))
+			v.addLine(fmt.Sprintf(`usb.autoConnect.%s = "vid:%s pid:%s autoclean:0"`, label, vid, pid))
+
+		}
+	}
+	return "Configured USB devices", nil
 }

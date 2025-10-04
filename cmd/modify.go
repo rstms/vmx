@@ -82,6 +82,9 @@ Changes can be specified for multiple categories in a single command.
 		isoOptions, err := InitIsoOptions()
 		cobra.CheckErr(err)
 
+		err = initUSBOptions(&options)
+		cobra.CheckErr(err)
+
 		actions, err := vmx.Modify(vm.Name, options, *isoOptions)
 		cobra.CheckErr(err)
 		if OutputJSON {
@@ -223,6 +226,46 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
+func initUSBOptions(options *ws.CreateOptions) error {
+
+	if ViperGetBool("usb_allow_hid") {
+		options.ModifyUSB = true
+		options.AllowHID = true
+	}
+
+	if ViperGetBool("no_usb_allow_hid") {
+		options.ModifyUSB = true
+	}
+
+	if ViperGetBool("usb_allow_ccid") {
+		options.ModifyUSB = true
+		options.AllowCCID = true
+	}
+
+	if ViperGetBool("no_usb_allow_ccid") {
+		options.ModifyUSB = true
+	}
+
+	usb0 := ViperGetString("usb0")
+	if usb0 != "" {
+		options.ModifyUSB = true
+		options.Device0 = usb0
+	}
+	if ViperGetBool("no_usb0") {
+		options.ModifyUSB = true
+	}
+
+	usb1 := ViperGetString("usb1")
+	if usb1 != "" {
+		options.ModifyUSB = true
+		options.Device1 = usb1
+	}
+	if ViperGetBool("no_usb1") {
+		options.ModifyUSB = true
+	}
+	return nil
+}
+
 func init() {
 	CobraAddCommand(rootCmd, rootCmd, modifyCmd)
 	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet [auto-generated MAC]")
@@ -247,4 +290,17 @@ func init() {
 	OptionSwitch(modifyCmd, "clipboard-enable", "", "enable copy/paste/drag-and-drop")
 	OptionSwitch(modifyCmd, "clipboard-disable", "", "disable copy/paste/drag-and-drop")
 
+	OptionSwitch(modifyCmd, "usb-allow-hid", "", "enable USB AllowHID")
+	OptionSwitch(modifyCmd, "no-usb-allow-hid", "", "disable USB AllowHID")
+	OptionSwitch(modifyCmd, "usb-allow-ccid", "", "enable USB AllowCCID")
+	OptionSwitch(modifyCmd, "no-usb-allow-ccid", "", "disable USB AllowCCID flag")
+	OptionString(modifyCmd, "usb0", "", "", "set USB device0 VID:PID")
+	OptionSwitch(modifyCmd, "no-usb0", "", "clear USB device0")
+	OptionString(modifyCmd, "usb1", "", "", "set USB device1 VID:PID")
+	OptionSwitch(modifyCmd, "no-usb1", "", "clear USB device1")
+
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-allow-hid", "no-usb-allow-hid")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-allow-ccid", "no-usb-allow-ccid")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb0", "no-usb0")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb1", "no-usb1")
 }
