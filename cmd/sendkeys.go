@@ -32,6 +32,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"io/ioutil"
+	"os"
 )
 
 var sendkeysCmd = &cobra.Command{
@@ -55,6 +57,11 @@ vmx sendkeys testvm 'echo $PATH\n'
 	Run: func(cmd *cobra.Command, args []string) {
 		vid := args[0]
 		keys := args[1]
+		if keys == "-" {
+			data, err := ioutil.ReadAll(os.Stdin)
+			cobra.CheckErr(err)
+			keys = string(data)
+		}
 		InitController()
 		err := vmx.SendKeys(vid, keys)
 		cobra.CheckErr(err)
