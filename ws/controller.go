@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.23"
+const Version = "0.1.24"
 
 var WINDOWS_ENV_PATTERN = regexp.MustCompile(`^WINDIR=.*WINDOWS.*`)
 var ENCRYPTED_VM_ERROR = regexp.MustCompile(`Something went wrong while getting password from stdin`)
