@@ -38,7 +38,7 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	}
 	switch v.Shell {
 	case "winexec":
-		stdout, _, err := v.winexec.Exec("cmd", []string{"/c", command}, exitCode)
+		stdout, _, err := v.winexec.Exec("cmd", []string{"/c", command}, []string{}, exitCode)
 		if err != nil {
 			return []string{}, Fatal(err)
 		}
@@ -64,7 +64,7 @@ func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
 	}
 	switch v.Shell {
 	case "winexec":
-		return v.winexec.Spawn(command, exitCode)
+		return v.winexec.Spawn(command, []string{}, []string{}, exitCode)
 	case "ssh":
 		args := v.sshArgs()
 		if v.Remote == "windows" {

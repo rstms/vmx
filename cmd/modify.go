@@ -87,6 +87,7 @@ Changes can be specified for multiple categories in a single command.
 
 		actions, err := vmx.Modify(vm.Name, options, *isoOptions)
 		cobra.CheckErr(err)
+
 		if OutputJSON {
 			output := make(map[string]any)
 			output[vm.Name] = actions
@@ -102,12 +103,12 @@ Changes can be specified for multiple categories in a single command.
 }
 
 func initETHOptions(options *ws.CreateOptions) error {
-	enable := ViperGetBool("eth_enable")
-	disable := ViperGetBool("eth_disable")
+	enable := ViperGetBool("modify.eth_enable")
+	disable := ViperGetBool("modify.eth_disable")
 	if enable && disable {
 		return Fatalf("conflict: eth_enable/eth_disable")
 	}
-	address := ViperGetString("eth_mac")
+	address := ViperGetString("modify.eth_mac")
 	if address != "" {
 		enable = true
 		if disable {
@@ -129,10 +130,10 @@ func initETHOptions(options *ws.CreateOptions) error {
 
 func initTTYOptions(options *ws.CreateOptions) error {
 
-	ttyPipe := ViperGetString("tty_pipe")
-	disable := ViperGetBool("tty_disable")
-	ttyClient := ViperGetBool("tty_client")
-	ttyV2V := ViperGetBool("tty_v2v")
+	ttyPipe := ViperGetString("modify.tty_pipe")
+	disable := ViperGetBool("modify.tty_disable")
+	ttyClient := ViperGetBool("modify.tty_client")
+	ttyV2V := ViperGetBool("modify.tty_v2v")
 
 	switch {
 	case ttyPipe != "":
@@ -156,8 +157,8 @@ func initTTYOptions(options *ws.CreateOptions) error {
 }
 
 func initVNCOptions(options *ws.CreateOptions) error {
-	enable := ViperGetBool("vnc_enable")
-	disable := ViperGetBool("vnc_disable")
+	enable := ViperGetBool("modify.vnc_enable")
+	disable := ViperGetBool("modify.vnc_disable")
 	if enable && disable {
 		return Fatalf("conflict: vnc-enable/vnc-disable")
 	}
@@ -165,7 +166,7 @@ func initVNCOptions(options *ws.CreateOptions) error {
 	case enable:
 		options.ModifyVNC = true
 		options.VNCEnabled = true
-		options.VNCPort = ViperGetInt("vnc_port")
+		options.VNCPort = ViperGetInt("modify.vnc_port")
 	case disable:
 		options.ModifyVNC = true
 	}
@@ -173,8 +174,8 @@ func initVNCOptions(options *ws.CreateOptions) error {
 }
 
 func initEFIOptions(options *ws.CreateOptions) error {
-	bootEFI := ViperGetBool("boot_efi")
-	bootBIOS := ViperGetBool("boot_bios")
+	bootEFI := ViperGetBool("modify.boot_efi")
+	bootBIOS := ViperGetBool("modify.boot_bios")
 	if bootEFI && bootBIOS {
 		return Fatalf("conflict: boot-efi/boot-bios")
 	}
@@ -189,8 +190,8 @@ func initEFIOptions(options *ws.CreateOptions) error {
 }
 
 func initShareOptions(options *ws.CreateOptions) error {
-	enable := ViperGetString("share_enable")
-	disable := ViperGetBool("share_disable")
+	enable := ViperGetString("modify.share_enable")
+	disable := ViperGetBool("modify.share_disable")
 	switch {
 	case enable != "":
 		if disable {
@@ -211,8 +212,8 @@ func initShareOptions(options *ws.CreateOptions) error {
 }
 
 func initClipboardOptions(options *ws.CreateOptions) error {
-	enable := ViperGetBool("clibboard_enable")
-	disable := ViperGetBool("clipboard_disable")
+	enable := ViperGetBool("modify.clibboard_enable")
+	disable := ViperGetBool("modify.clipboard_disable")
 	switch {
 	case enable:
 		if disable {
@@ -228,39 +229,39 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 
 func initUSBOptions(options *ws.CreateOptions) error {
 
-	if ViperGetBool("usb_allow_hid") {
+	if ViperGetBool("modify.usb_allow_hid") {
 		options.ModifyUSB = true
 		options.AllowHID = true
 	}
 
-	if ViperGetBool("no_usb_allow_hid") {
+	if ViperGetBool("modify.no_usb_allow_hid") {
 		options.ModifyUSB = true
 	}
 
-	if ViperGetBool("usb_allow_ccid") {
+	if ViperGetBool("modify.usb_allow_ccid") {
 		options.ModifyUSB = true
 		options.AllowCCID = true
 	}
 
-	if ViperGetBool("no_usb_allow_ccid") {
+	if ViperGetBool("modify.no_usb_allow_ccid") {
 		options.ModifyUSB = true
 	}
 
-	usb0 := ViperGetString("usb0")
+	usb0 := ViperGetString("modify.usb0")
 	if usb0 != "" {
 		options.ModifyUSB = true
 		options.Device0 = usb0
 	}
-	if ViperGetBool("no_usb0") {
+	if ViperGetBool("modify.no_usb0") {
 		options.ModifyUSB = true
 	}
 
-	usb1 := ViperGetString("usb1")
+	usb1 := ViperGetString("modify.usb1")
 	if usb1 != "" {
 		options.ModifyUSB = true
 		options.Device1 = usb1
 	}
-	if ViperGetBool("no_usb1") {
+	if ViperGetBool("modify.no_usb1") {
 		options.ModifyUSB = true
 	}
 	return nil

@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -181,6 +182,10 @@ func NewVMXController() (Controller, error) {
 	if err != nil {
 		return nil, Fatal(err)
 	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, Fatal(err)
+	}
 
 	ViperSetDefault(prefix+"host", "localhost")
 	ViperSetDefault(prefix+"vmware_roots", []string{"/var/vmware"})
@@ -189,6 +194,9 @@ func NewVMXController() (Controller, error) {
 	ViperSetDefault(prefix+"interval_seconds", DEFAULT_INTERVAL_SECONDS)
 	ViperSetDefault(prefix+"timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 	ViperSetDefault(prefix+"user", user.Username)
+	ViperSetDefault(prefix+"ca", filepath.Join(configDir, ProgramName(), "keymaster.pem"))
+	ViperSetDefault(prefix+"cert", filepath.Join(configDir, ProgramName(), "winexec-client.pem"))
+	ViperSetDefault(prefix+"key", filepath.Join(configDir, ProgramName(), "winexec-client.key"))
 
 	v := vmctl{
 		Hostname:        ViperGetString(prefix + "host"),
@@ -235,7 +243,10 @@ func NewVMXController() (Controller, error) {
 		v.Shell = ViperGetString(prefix + "shell")
 		switch v.Shell {
 		case "winexec":
-			w, err := client.NewWinexecClient()
+			ca := ViperGetString(prefix + "ca")
+			cert := ViperGetString(prefix + "cert")
+			key := ViperGetString(prefix + "key")
+			w, err := client.NewWinexecClient(ca, cert, key)
 			if err != nil {
 				return nil, Fatal(err)
 			}
