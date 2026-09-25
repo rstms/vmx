@@ -57,11 +57,14 @@ type CreateOptions struct {
 
 	ModifyFloppy bool
 
-	ModifyUSB bool
-	AllowHID  bool
-	AllowCCID bool
-	Device0   string
-	Device1   string
+	ModifyUSB  bool
+	AllowHID   bool
+	AllowCCID  bool
+	Device0    string
+	Device1    string
+	Device2    string
+	Device3    string
+	USBVersion int
 
 	Wait bool
 }

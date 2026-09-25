@@ -229,39 +229,70 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 
 func initUSBOptions(options *ws.CreateOptions) error {
 
-	if ViperGetBool("modify.usb_allow_hid") {
+	if ViperGetBool("modify.usb_disable") {
+		options.ModifyUSB = true
+		options.USBVersion = 0
+		return nil
+	}
+
+	if ViperGetBool("modify.usb") {
+		options.ModifyUSB = true
+		options.USBVersion = 3
+	}
+
+	if ViperGetBool("modify.usb_v2") {
+		options.ModifyUSB = true
+		options.USBVersion = 2
+	}
+
+	if ViperGetBool("modify.usb_v3") {
+		options.ModifyUSB = true
+		options.USBVersion = 3
+	}
+
+	if ViperGetBool("modify.usb_hid_enable") {
 		options.ModifyUSB = true
 		options.AllowHID = true
 	}
 
-	if ViperGetBool("modify.no_usb_allow_hid") {
+	if ViperGetBool("modify.usb_hid_disable") {
 		options.ModifyUSB = true
 	}
 
-	if ViperGetBool("modify.usb_allow_ccid") {
+	if ViperGetBool("modify.usb_ccid_enable") {
 		options.ModifyUSB = true
 		options.AllowCCID = true
 	}
 
-	if ViperGetBool("modify.no_usb_allow_ccid") {
+	if ViperGetBool("modify.usb_ccid_disable") {
 		options.ModifyUSB = true
 	}
 
-	usb0 := ViperGetString("modify.usb0")
-	if usb0 != "" {
+	value := ViperGetString("modify.usb_auto_0")
+	if value != "" {
 		options.ModifyUSB = true
-		options.Device0 = usb0
-	}
-	if ViperGetBool("modify.no_usb0") {
-		options.ModifyUSB = true
+		options.Device0 = value
 	}
 
-	usb1 := ViperGetString("modify.usb1")
-	if usb1 != "" {
+	value = ViperGetString("modify.usb_auto_1")
+	if value != "" {
 		options.ModifyUSB = true
-		options.Device1 = usb1
+		options.Device1 = value
 	}
-	if ViperGetBool("modify.no_usb1") {
+
+	value = ViperGetString("modify.usb_auto_2")
+	if value != "" {
+		options.ModifyUSB = true
+		options.Device2 = value
+	}
+
+	value = ViperGetString("modify.usb_auto_3")
+	if value != "" {
+		options.ModifyUSB = true
+		options.Device3 = value
+	}
+
+	if ViperGetBool("modify.usb_disable") {
 		options.ModifyUSB = true
 	}
 	return nil
@@ -272,36 +303,52 @@ func init() {
 	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet [auto-generated MAC]")
 	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet [user-defined MAC]")
 	OptionSwitch(modifyCmd, "eth-disable", "", "remove ethernet device")
+	modifyCmd.MarkFlagsMutuallyExclusive("eth-enable", "eth-disable")
 
 	OptionSwitch(modifyCmd, "vnc-enable", "", "enable instance VNC server")
 	OptionString(modifyCmd, "vnc-port", "", "5900", "VNC listen port")
 	OptionSwitch(modifyCmd, "vnc-disable", "", "disable VNC server")
+	modifyCmd.MarkFlagsMutuallyExclusive("vnc-enable", "vnc-disable")
 
 	OptionString(modifyCmd, "tty-pipe", "", "", "enable serial port with named pipe")
 	OptionSwitch(modifyCmd, "tty-disable", "", "disable and remove serial port")
 	OptionSwitch(modifyCmd, "tty-client", "", "instance connects to pipe [default: instance creates pipe]")
 	OptionSwitch(modifyCmd, "tty-v2v", "", "configure for VM to VM connection")
+	modifyCmd.MarkFlagsMutuallyExclusive("tty-disable", "tty-pipe")
+	modifyCmd.MarkFlagsMutuallyExclusive("tty-disable", "tty-client")
+	modifyCmd.MarkFlagsMutuallyExclusive("tty-disable", "tty-v2v")
 
 	OptionSwitch(modifyCmd, "boot-efi", "", "select EFI boot firmware")
 	OptionSwitch(modifyCmd, "boot-bios", "", "select BIOS boot firmware")
+	modifyCmd.MarkFlagsMutuallyExclusive("boot-efi", "boot-bios")
 
 	OptionString(modifyCmd, "share-enable", "", "", "enable filesystem share [format: 'host_path,guest_path']")
 	OptionSwitch(modifyCmd, "share-disable", "", "disable filesystem share")
+	modifyCmd.MarkFlagsMutuallyExclusive("share-enable", "share-disable")
 
 	OptionSwitch(modifyCmd, "clipboard-enable", "", "enable copy/paste/drag-and-drop")
 	OptionSwitch(modifyCmd, "clipboard-disable", "", "disable copy/paste/drag-and-drop")
+	modifyCmd.MarkFlagsMutuallyExclusive("clipboard-enable", "clipboard-disable")
 
-	OptionSwitch(modifyCmd, "usb-allow-hid", "", "enable USB AllowHID")
-	OptionSwitch(modifyCmd, "no-usb-allow-hid", "", "disable USB AllowHID")
-	OptionSwitch(modifyCmd, "usb-allow-ccid", "", "enable USB AllowCCID")
-	OptionSwitch(modifyCmd, "no-usb-allow-ccid", "", "disable USB AllowCCID flag")
-	OptionString(modifyCmd, "usb0", "", "", "set USB device0 VID:PID")
-	OptionSwitch(modifyCmd, "no-usb0", "", "clear USB device0")
-	OptionString(modifyCmd, "usb1", "", "", "set USB device1 VID:PID")
-	OptionSwitch(modifyCmd, "no-usb1", "", "clear USB device1")
+	OptionSwitch(modifyCmd, "usb-hid-enable", "", "enable USB AllowHID")
+	OptionSwitch(modifyCmd, "usb-hid-disable", "", "disable USB AllowHID")
+	OptionSwitch(modifyCmd, "usb-ccid-enable", "", "enable USB AllowCCID")
+	OptionSwitch(modifyCmd, "usb-ccid-disable", "", "disable USB AllowCCID")
+	OptionString(modifyCmd, "usb-auto-0", "", "", "USB autoconnect device0 VID:PID")
+	OptionString(modifyCmd, "usb-auto-1", "", "", "USB autoconnect device1 VID:PID")
+	OptionString(modifyCmd, "usb-auto-2", "", "", "USB autoconnect device2 VID:PID")
+	OptionString(modifyCmd, "usb-auto-3", "", "", "USB autoconnect device3 VID:PID")
+	OptionSwitch(modifyCmd, "usb", "", "enable USB controller (default version 3.2)")
+	OptionSwitch(modifyCmd, "usb-v3", "", "enable USB version 3.2 controller")
+	OptionSwitch(modifyCmd, "usb-v2", "", "enable USB Version 2.0 controller")
+	OptionSwitch(modifyCmd, "usb-disable", "", "disable USB controller")
 
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-allow-hid", "no-usb-allow-hid")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-allow-ccid", "no-usb-allow-ccid")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb0", "no-usb0")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb1", "no-usb1")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-hid-enable", "usb-hid-disable")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-ccid-enable", "usb-ccid-disable")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb-v2")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb-v3")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb", "usb-v2")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb", "usb-v3")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb-v2", "usb-v3")
 }

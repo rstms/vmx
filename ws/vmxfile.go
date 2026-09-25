@@ -11,7 +11,11 @@ var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
 var ISO_FILENAME_PATTERN = regexp.MustCompile(`^ide1:0\.fileName = "([^"]*)"`)
 var ISO_PRESENT_PATTERN = regexp.MustCompile(`^ide1:0\.present = "([^"]*)"`)
-var USB_ID_PATTERN = regexp.MustCompile(`^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$`)
+var VID_PATTERN = regexp.MustCompile(`^vid:(?:0x)*([[:xdigit:]]{4})$`)
+var PID_PATTERN = regexp.MustCompile(`^pid:(?:0x)*([[:xdigit:]]{4})$`)
+var AUTOCLEAN_PATTERN = regexp.MustCompile(`^autoclean:([01])$`)
+var VIDPID_PATTERN = regexp.MustCompile(`^(?:0x)*([[:xdigit:]]{4}):(?:0x)*([[:xdigit:]]{4})$`)
+var VIDONLY_PATTERN = regexp.MustCompile(`^(?:0x)*([[:xdigit:]]{4})$`)
 
 // OS names generated using the error message from this command:
 // 'vmcli VM create -n notavalidname -d /notavaliddir -g notavalidosname
@@ -254,6 +258,7 @@ func (v *VMX) removePrefix(prefix string) {
 }
 
 func (v *VMX) addLine(line string) {
+	log.Printf("addLine: %s\n", line)
 	v.lines = append(v.lines, line)
 }
 
@@ -587,9 +592,15 @@ func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 		log.Printf("SetUSB: %s\n", FormatJSON(*options))
 	}
 
-	v.removePrefix("usb.generic.allow")
-	v.removePrefix("usb.autoConnect")
-	v.removePrefix("usb.quirks")
+	v.removePrefix("usb")
+
+	if options.USBVersion > 0 {
+		v.addLine(`usb.present = "TRUE"`)
+	}
+
+	if options.USBVersion > 2 {
+		v.addLine(`usb_xhci.present = "TRUE"`)
+	}
 
 	if options.AllowHID {
 		v.addLine(`usb.generic.allowHID = "TRUE"`)
@@ -601,20 +612,50 @@ func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 	devices := map[string]string{
 		"device0": options.Device0,
 		"device1": options.Device1,
+		"device2": options.Device2,
+		"device3": options.Device3,
 	}
 	for label, ids := range devices {
-
+		//log.Printf("label=%s ids=%s\n", label, ids)
 		if ids != "" {
-			if !USB_ID_PATTERN.MatchString(ids) {
-				return "", Fatalf("unexpected format: USB %s: %s", label, ids)
+			vid := ""
+			pid := ""
+			autoclean := "0"
+			fields := strings.Split(ids, " ")
+			//log.Printf("fields=%+v\n", fields)
+			for _, field := range fields {
+				vidMatch := VID_PATTERN.FindStringSubmatch(field)
+				pidMatch := PID_PATTERN.FindStringSubmatch(field)
+				autocleanMatch := AUTOCLEAN_PATTERN.FindStringSubmatch(field)
+				vidPidMatch := VIDPID_PATTERN.FindStringSubmatch(field)
+				vidOnlyMatch := VIDONLY_PATTERN.FindStringSubmatch(field)
+				if len(vidMatch) > 1 {
+					vid = vidMatch[len(vidMatch)-1]
+				} else if len(pidMatch) > 1 {
+					pid = pidMatch[len(pidMatch)-1]
+				} else if len(vidPidMatch) > 2 {
+					vid = vidPidMatch[1]
+					pid = vidPidMatch[2]
+				} else if len(vidOnlyMatch) > 1 {
+					vid = vidOnlyMatch[1]
+				} else if len(autocleanMatch) > 1 {
+					autoclean = autocleanMatch[len(autocleanMatch)-1]
+				} else {
+					return "", Fatalf("unexpected field %s in USB %s: %s", field, label, ids)
+				}
 			}
-			vid, pid, ok := strings.Cut(ids, ":")
-			if !ok {
-				return "", Fatalf("failed parsing USB %s: %s", label, ids)
+			if vid == "" {
+				return "", Fatalf("missing VID in USB %s: %s", label, ids)
 			}
-			v.addLine(fmt.Sprintf(`usb.quirks.%s = "0x%s:0x%s allow"`, label, vid, pid))
-			v.addLine(fmt.Sprintf(`usb.autoConnect.%s = "vid:%s pid:%s autoclean:0"`, label, vid, pid))
-
+			connect := "vid:" + vid
+			quirk := "0x" + vid
+			if pid != "" {
+				connect += " pid:" + pid
+				quirk += ":0x" + pid
+			}
+			//fmt.Printf("connect=%s quirk=%s autoclean=%s\n", connect, quirk, autoclean)
+			v.addLine(fmt.Sprintf(`usb_xhci.autoconnect.%s = "%s autoclean:%s"`, label, connect, autoclean))
+			v.addLine(fmt.Sprintf(`usb.quirks.%s = "%s allow"`, label, quirk))
 		}
 	}
 	return "Configured USB devices", nil
