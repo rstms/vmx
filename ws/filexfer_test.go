@@ -9,7 +9,10 @@ import (
 
 func initClient(t *testing.T) *client.WinexecClient {
 	initTestConfig(t)
-	c, err := client.NewWinexecClient()
+	ca := ViperGetString("winexec.client.ca")
+	cert := ViperGetString("winexec.client.cert")
+	key := ViperGetString("winexec.client.key")
+	c, err := client.NewWinexecClient(ca, cert, key)
 	require.Nil(t, err)
 	return c
 }

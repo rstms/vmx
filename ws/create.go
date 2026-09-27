@@ -57,14 +57,15 @@ type CreateOptions struct {
 
 	ModifyFloppy bool
 
-	ModifyUSB  bool
-	AllowHID   bool
-	AllowCCID  bool
-	Device0    string
-	Device1    string
-	Device2    string
-	Device3    string
-	USBVersion int
+	ModifyUSB   bool
+	AllowHID    bool
+	AllowCCID   bool
+	Device0     string
+	Device1     string
+	Device2     string
+	Device3     string
+	USBVersion  int
+	RestrictUSB bool
 
 	Wait bool
 }
@@ -100,7 +101,9 @@ func NewCreateOptions() *CreateOptions {
 func (v *vmctl) Create(name string, options CreateOptions, isoOptions IsoOptions) (string, error) {
 
 	if v.debug {
-		log.Printf("Create(name='%s', options='%+v' isoOptions='%+v'\n", name, options, isoOptions)
+		log.Printf("Create: name='%s'\n", name)
+		log.Printf("  options: %s\n", FormatJSON(options))
+		log.Printf("  isoOptions: %s\n", FormatJSON(isoOptions))
 	}
 
 	// check for existing instance

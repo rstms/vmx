@@ -103,27 +103,23 @@ Changes can be specified for multiple categories in a single command.
 }
 
 func initETHOptions(options *ws.CreateOptions) error {
-	enable := ViperGetBool("modify.eth_enable")
-	disable := ViperGetBool("modify.eth_disable")
-	if enable && disable {
-		return Fatalf("conflict: eth_enable/eth_disable")
+
+	if ViperGetBool("modify.eth") {
+		options.ModifyNIC = true
+		options.MacAddress = "auto"
+		return nil
 	}
+
+	if ViperGetBool("modify.no_eth") {
+		options.ModifyNIC = true
+		return nil
+	}
+
 	address := ViperGetString("modify.eth_mac")
 	if address != "" {
-		enable = true
-		if disable {
-			return Fatalf("conflict: eth_mac/eth_disable")
-		}
-	}
-	switch {
-	case enable:
 		options.ModifyNIC = true
-		if address == "" {
-			address = "auto"
-		}
 		options.MacAddress = address
-	case disable:
-		options.ModifyNIC = true
+		return nil
 	}
 	return nil
 }
@@ -190,46 +186,39 @@ func initEFIOptions(options *ws.CreateOptions) error {
 }
 
 func initShareOptions(options *ws.CreateOptions) error {
-	enable := ViperGetString("modify.share_enable")
-	disable := ViperGetBool("modify.share_disable")
-	switch {
-	case enable != "":
-		if disable {
-			return Fatalf("conflict: share-enable/share-disable")
-		}
+	if ViperGetBool("modify.no_share") {
+		options.ModifyShare = true
+		return nil
+	}
+	share := ViperGetString("modify.share")
+	if share != "" {
 		options.ModifyShare = true
 		options.FileShareEnabled = true
-		host, guest, ok := strings.Cut(enable, ",")
+		host, guest, ok := strings.Cut(share, ",")
 		if !ok || host == "" || guest == "" {
-			return Fatalf("failed parsing share-enable paths: '%s'", enable)
+			return Fatalf("failed parsing share-enable paths: '%s'", share)
 		}
 		options.SharedHostPath = host
 		options.SharedGuestPath = guest
-	case disable:
-		options.ModifyShare = true
 	}
 	return nil
 }
 
 func initClipboardOptions(options *ws.CreateOptions) error {
-	enable := ViperGetBool("modify.clibboard_enable")
-	disable := ViperGetBool("modify.clipboard_disable")
-	switch {
-	case enable:
-		if disable {
-			return Fatalf("conflict: clipboard-enable/clipboard-disable")
-		}
+	if ViperGetBool("modify.clibboard") {
 		options.ModifyClipboard = true
 		options.ClipboardEnabled = true
-	case disable:
+	}
+	if ViperGetBool("modify.no_clipboard") {
 		options.ModifyClipboard = true
+		options.ClipboardEnabled = false
 	}
 	return nil
 }
 
 func initUSBOptions(options *ws.CreateOptions) error {
 
-	if ViperGetBool("modify.usb_disable") {
+	if ViperGetBool("modify.no_usb") {
 		options.ModifyUSB = true
 		options.USBVersion = 0
 		return nil
@@ -240,70 +229,63 @@ func initUSBOptions(options *ws.CreateOptions) error {
 		options.USBVersion = 3
 	}
 
-	if ViperGetBool("modify.usb_v2") {
+	if ViperGetBool("modify.usb2") {
 		options.ModifyUSB = true
 		options.USBVersion = 2
 	}
 
-	if ViperGetBool("modify.usb_v3") {
-		options.ModifyUSB = true
-		options.USBVersion = 3
-	}
-
-	if ViperGetBool("modify.usb_hid_enable") {
+	if ViperGetBool("modify.usb_hid") {
 		options.ModifyUSB = true
 		options.AllowHID = true
 	}
 
-	if ViperGetBool("modify.usb_hid_disable") {
-		options.ModifyUSB = true
-	}
-
-	if ViperGetBool("modify.usb_ccid_enable") {
+	if ViperGetBool("modify.usb_ccid") {
 		options.ModifyUSB = true
 		options.AllowCCID = true
 	}
 
-	if ViperGetBool("modify.usb_ccid_disable") {
+	if ViperGetBool("modify.usb_restrict") {
 		options.ModifyUSB = true
+		options.RestrictUSB = true
 	}
 
-	value := ViperGetString("modify.usb_auto_0")
-	if value != "" {
+	device := ViperGetString("modify.usb_device0")
+	if device != "" {
 		options.ModifyUSB = true
-		options.Device0 = value
+		options.Device0 = device
 	}
 
-	value = ViperGetString("modify.usb_auto_1")
-	if value != "" {
+	device = ViperGetString("modify.usb_device1")
+	if device != "" {
 		options.ModifyUSB = true
-		options.Device1 = value
+		options.Device1 = device
 	}
 
-	value = ViperGetString("modify.usb_auto_2")
-	if value != "" {
+	device = ViperGetString("modify.usb_device2")
+	if device != "" {
 		options.ModifyUSB = true
-		options.Device2 = value
+		options.Device2 = device
 	}
 
-	value = ViperGetString("modify.usb_auto_3")
-	if value != "" {
+	device = ViperGetString("modify.usb_device3")
+	if device != "" {
 		options.ModifyUSB = true
-		options.Device3 = value
+		options.Device3 = device
 	}
 
-	if ViperGetBool("modify.usb_disable") {
-		options.ModifyUSB = true
+	if options.ModifyUSB || (options.USBVersion != 2) {
+		options.USBVersion = 3
 	}
+
 	return nil
 }
 
 func init() {
 	CobraAddCommand(rootCmd, rootCmd, modifyCmd)
-	OptionSwitch(modifyCmd, "eth-enable", "", "enable ethernet [auto-generated MAC]")
-	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet [user-defined MAC]")
-	OptionSwitch(modifyCmd, "eth-disable", "", "remove ethernet device")
-	modifyCmd.MarkFlagsMutuallyExclusive("eth-enable", "eth-disable")
+	OptionSwitch(modifyCmd, "eth", "", "enable ethernet (auto-generated MAC)")
+	OptionString(modifyCmd, "eth-mac", "", "", "enable ethernet (user-defined MAC)")
+	OptionSwitch(modifyCmd, "no-eth", "", "remove ethernet device")
+	modifyCmd.MarkFlagsMutuallyExclusive("eth", "no-eth")
 
 	OptionSwitch(modifyCmd, "vnc-enable", "", "enable instance VNC server")
 	OptionString(modifyCmd, "vnc-port", "", "5900", "VNC listen port")
@@ -322,33 +304,25 @@ func init() {
 	OptionSwitch(modifyCmd, "boot-bios", "", "select BIOS boot firmware")
 	modifyCmd.MarkFlagsMutuallyExclusive("boot-efi", "boot-bios")
 
-	OptionString(modifyCmd, "share-enable", "", "", "enable filesystem share [format: 'host_path,guest_path']")
-	OptionSwitch(modifyCmd, "share-disable", "", "disable filesystem share")
-	modifyCmd.MarkFlagsMutuallyExclusive("share-enable", "share-disable")
+	OptionString(modifyCmd, "share", "", "", "enable filesystem share [format: 'host_path,guest_path']")
+	OptionSwitch(modifyCmd, "no-share", "", "disable filesystem share")
 
-	OptionSwitch(modifyCmd, "clipboard-enable", "", "enable copy/paste/drag-and-drop")
-	OptionSwitch(modifyCmd, "clipboard-disable", "", "disable copy/paste/drag-and-drop")
-	modifyCmd.MarkFlagsMutuallyExclusive("clipboard-enable", "clipboard-disable")
+	OptionSwitch(modifyCmd, "clipboard", "", "enable copy/paste/drag-and-drop")
+	OptionSwitch(modifyCmd, "no-clipboard", "", "disable copy/paste/drag-and-drop")
+	modifyCmd.MarkFlagsMutuallyExclusive("clipboard", "no-clipboard")
 
-	OptionSwitch(modifyCmd, "usb-hid-enable", "", "enable USB AllowHID")
-	OptionSwitch(modifyCmd, "usb-hid-disable", "", "disable USB AllowHID")
-	OptionSwitch(modifyCmd, "usb-ccid-enable", "", "enable USB AllowCCID")
-	OptionSwitch(modifyCmd, "usb-ccid-disable", "", "disable USB AllowCCID")
-	OptionString(modifyCmd, "usb-auto-0", "", "", "USB autoconnect device0 VID:PID")
-	OptionString(modifyCmd, "usb-auto-1", "", "", "USB autoconnect device1 VID:PID")
-	OptionString(modifyCmd, "usb-auto-2", "", "", "USB autoconnect device2 VID:PID")
-	OptionString(modifyCmd, "usb-auto-3", "", "", "USB autoconnect device3 VID:PID")
-	OptionSwitch(modifyCmd, "usb", "", "enable USB controller (default version 3.2)")
-	OptionSwitch(modifyCmd, "usb-v3", "", "enable USB version 3.2 controller")
-	OptionSwitch(modifyCmd, "usb-v2", "", "enable USB Version 2.0 controller")
-	OptionSwitch(modifyCmd, "usb-disable", "", "disable USB controller")
+	OptionSwitch(modifyCmd, "usb-hid", "", "enable USB AllowHID")
+	OptionSwitch(modifyCmd, "usb-ccid", "", "enable USB AllowCCID")
+	OptionSwitch(modifyCmd, "usb-restrict", "", "restrict USB devices")
+	OptionString(modifyCmd, "usb-device0", "", "", "USB autoconnect device0 VID:PID")
+	OptionString(modifyCmd, "usb-device1", "", "", "USB autoconnect device1 VID:PID")
+	OptionString(modifyCmd, "usb-device2", "", "", "USB autoconnect device2 VID:PID")
+	OptionString(modifyCmd, "usb-device3", "", "", "USB autoconnect device3 VID:PID")
+	OptionSwitch(modifyCmd, "usb", "", "enable USB controller version 3.2)")
+	OptionSwitch(modifyCmd, "usb2", "", "enable USB Version 2.0 controller")
+	OptionSwitch(modifyCmd, "no-usb", "", "disable USB controller")
 
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-hid-enable", "usb-hid-disable")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-ccid-enable", "usb-ccid-disable")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb-v2")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-disable", "usb-v3")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb", "usb-v2")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb", "usb-v3")
-	modifyCmd.MarkFlagsMutuallyExclusive("usb-v2", "usb-v3")
+	modifyCmd.MarkFlagsMutuallyExclusive("no-usb", "usb")
+	modifyCmd.MarkFlagsMutuallyExclusive("no-usb", "usb2")
+	modifyCmd.MarkFlagsMutuallyExclusive("usb2", "usb")
 }

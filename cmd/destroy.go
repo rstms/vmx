@@ -42,13 +42,12 @@ import (
 
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "delete all vm instance files",
+	Long: `
+The destroy command is used to irrecoverably delete all vm instance files on
+the host system.  Use this command with caution; it assumes you know what you
+are asking for.
+`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
@@ -57,7 +56,7 @@ to quickly create a Cobra application.`,
 		cobra.CheckErr(err)
 		if confirm(fmt.Sprintf("Confirm IRRECOVERABLE DESTRUCTION of VM instance '%s'", vm.Name)) {
 			options := ws.DestroyOptions{
-				Force: ViperGetBool("kill"),
+				Force: ViperGetBool("destroy.kill"),
 			}
 			err := vmx.Destroy(vm.Id, options)
 			cobra.CheckErr(err)
@@ -72,7 +71,7 @@ to quickly create a Cobra application.`,
 }
 
 func confirm(prompt string) bool {
-	if ViperGetBool("force") {
+	if ViperGetBool("destroy.force") {
 		return true
 	}
 	reader := bufio.NewReader(os.Stdin)

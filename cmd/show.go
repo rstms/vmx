@@ -52,8 +52,8 @@ Display VM instance data
 			vid = args[0]
 		}
 		options := ws.ShowOptions{
-			Detail:  ViperGetBool("detail"),
-			Running: !ViperGetBool("all"),
+			Detail:  ViperGetBool("show.detail"),
+			Running: !ViperGetBool("show.all"),
 		}
 		vms, err := vmx.Show(vid, options)
 		cobra.CheckErr(err)

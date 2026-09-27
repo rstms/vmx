@@ -47,43 +47,53 @@ unless specified with option flags.
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		name := args[0]
-
-		options := ws.NewCreateOptions()
-
-		options.Wait = ViperGetBool("wait")
-		options.CpuCount = ViperGetInt("cpu")
-		options.MemorySize = ViperGetString("ram")
-		options.DiskSize = ViperGetString("disk")
-		options.DiskPreallocated = ViperGetBool("preallocate")
-		options.DiskSingleFile = ViperGetBool("single_file")
-		options.EFIBoot = ViperGetBool("efi")
-		options.HostTimeSync = ViperGetBool("time_sync")
-		options.GuestTimeZone = ViperGetString("timezone")
-		options.ClipboardEnabled = ViperGetBool("clipboard")
-		options.MacAddress = ViperGetString("mac")
-
-		switch {
-		case ViperGetBool("openbsd"):
-			options.GuestOS = "openbsd-64"
-		case ViperGetBool("debian"):
-			options.GuestOS = "debian12-64"
-		case ViperGetBool("windows"):
-			options.GuestOS = "windows11-64"
-		case ViperGetBool("ubuntu"):
-			options.GuestOS = "ubuntu-64"
-		default:
-			options.GuestOS = "other-64"
-		}
-
-		isoOptions, err := InitIsoOptions()
+		_, result, err := Create(name)
 		cobra.CheckErr(err)
-
-		result, err := vmx.Create(name, *options, *isoOptions)
-		cobra.CheckErr(err)
-		if OutputJSON && options.Wait && ViperGetBool("status") {
+		if OutputJSON && ViperGetBool("wait") && ViperGetBool("status") {
 			OutputInstanceState(name, result)
 		}
 	},
+}
+
+func Create(name string) (ws.Controller, string, error) {
+
+	options := ws.NewCreateOptions()
+
+	options.Wait = ViperGetBool("wait")
+	options.CpuCount = ViperGetInt("create.cpu")
+	options.MemorySize = ViperGetString("create.ram")
+	options.DiskSize = ViperGetString("create.disk")
+	options.DiskPreallocated = ViperGetBool("create.preallocate")
+	options.DiskSingleFile = ViperGetBool("create.single_file")
+	options.EFIBoot = ViperGetBool("create.efi")
+	options.HostTimeSync = ViperGetBool("create.time_sync")
+	options.GuestTimeZone = ViperGetString("create.timezone")
+	options.ClipboardEnabled = ViperGetBool("create.clipboard")
+	options.MacAddress = ViperGetString("create.mac")
+
+	switch {
+	case ViperGetBool("create.openbsd"):
+		options.GuestOS = "openbsd-64"
+	case ViperGetBool("create.debian"):
+		options.GuestOS = "debian12-64"
+	case ViperGetBool("create.windows"):
+		options.GuestOS = "windows11-64"
+	case ViperGetBool("create.ubuntu"):
+		options.GuestOS = "ubuntu-64"
+	default:
+		options.GuestOS = "other-64"
+	}
+
+	isoOptions, err := InitIsoOptions()
+	if err != nil {
+		return nil, "", Fatal(err)
+	}
+
+	result, err := vmx.Create(name, *options, *isoOptions)
+	if err != nil {
+		return nil, "", Fatal(err)
+	}
+	return vmx, result, nil
 }
 
 func init() {

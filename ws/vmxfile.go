@@ -342,9 +342,9 @@ func (v *VMX) SetEFI(efi bool) (string, error) {
 	v.removePrefix("firmware =")
 	if efi {
 		v.addLine(`firmware = "efi"`)
-		return "Set EFI firmware", nil
+		return "boot=EFI", nil
 	}
-	return "Set BIOS firmware", nil
+	return "boot=BIOS", nil
 }
 
 func (v *VMX) SetISO(options *IsoOptions) (string, error) {
@@ -370,8 +370,9 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 	v.removePrefix("ide1:0.")
 	if !options.IsoPresent {
 		v.addLine(`ide1:0.present = "FALSE"`)
-		return "Removed boot ISO", nil
+		return "iso=absent", nil
 	}
+
 	v.addLine(`ide1:0.present = "TRUE"`)
 	v.addLine(`ide1:0.deviceType = "cdrom-image"`)
 
@@ -379,20 +380,20 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 	if err != nil {
 		return "", Fatal(err)
 	}
+	action := fmt.Sprintf("iso=%s", normalized)
 	hostPath, err := PathFormat(v.hostOS, normalized)
 	if err != nil {
 		return "", Fatal(err)
 	}
 	v.addLine(`ide1:0.fileName = "` + hostPath + `"`)
-	var atBoot string
 	if options.IsoBootConnected {
 		v.addLine(`ide1:0.startConnected = "TRUE"`)
-		atBoot = "connected"
+		action += " connected_at_boot"
 	} else {
 		v.addLine(`ide1:0.startConnected = "FALSE"`)
-		atBoot = "disconnected"
+		action += " disconnected_at_boot"
 	}
-	return fmt.Sprintf("Set boot ISO '%s' [%s]", normalized, atBoot), nil
+	return action, nil
 }
 
 // FIXME: more NIC options could be modified
@@ -538,7 +539,7 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 	v.removePrefix("isolation.tools.hgfs.")
 	if !enable {
 		v.addLine(`isolation.tools.hgfs.disable = "TRUE"`)
-		return "Disabled filesystem share", nil
+		return "share=disabled", nil
 	}
 
 	formatted, err := PathnameFormat(v.hostOS, hostPath)
@@ -564,7 +565,7 @@ func (v *VMX) SetFileShare(enable bool, hostPath, guestPath string) (string, err
 	v.addLine(fmt.Sprintf(`sharedFolder0.hostPath = "%s"`, hostPath))
 	v.addLine(`sharedFolder0.expiration = "never"`)
 	v.addLine(`sharedFolder0.maxNum = "1"`)
-	return fmt.Sprintf("Enabled filesystem share: host=%s guest=%s", hostPath, guestPath), nil
+	return fmt.Sprintf("share=enabled host=%s guest=%s", hostPath, guestPath), nil
 }
 
 func (v *VMX) SetTimeSync(enable bool) (string, error) {
@@ -587,26 +588,60 @@ func (v *VMX) SetTimeSync(enable bool) (string, error) {
 	return "Enabled host time sync", nil
 }
 
+// https://knowledge.broadcom.com/external/article?legacyId=1648
+// https://support.yubico.com/s/article/Troubleshooting-device-passthrough-with-VMware-Workstation-and-VMware-Fusion
+
 func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 	if v.debug {
 		log.Printf("SetUSB: %s\n", FormatJSON(*options))
 	}
 
+	action := "usb="
+
 	v.removePrefix("usb")
 
-	if options.USBVersion > 0 {
+	prefix := "usb"
+
+	switch options.USBVersion {
+	case 0:
+		return action + "disabled", nil
+	case 2:
 		v.addLine(`usb.present = "TRUE"`)
-	}
-
-	if options.USBVersion > 2 {
+		action += "2.0"
+		break
+	case 3:
+		action += "3.2"
+		v.addLine(`usb.present = "TRUE"`)
 		v.addLine(`usb_xhci.present = "TRUE"`)
+		prefix = "usb_xhci"
+		break
+	default:
+		return "", Fatalf("unexpected USB version: %d", options.USBVersion)
 	}
 
+	action += fmt.Sprintf(" restrict=%v", options.RestrictUSB)
+	if options.RestrictUSB {
+		v.addLine(`usb.restrictions.defaultAllow = "FALSE"`)
+	} else {
+		v.addLine(`usb.restrictions.defaultAllow = "TRUE"`)
+	}
+
+	action += fmt.Sprintf(" hid=%v", options.AllowHID)
 	if options.AllowHID {
 		v.addLine(`usb.generic.allowHID = "TRUE"`)
+		v.addLine(`usb.generic.allowLastHID = "TRUE"`)
+	} else {
+		v.addLine(`usb.generic.allowHID = "FALSE"`)
+		v.addLine(`usb.generic.allowLastHID = "FALSE"`)
 	}
+
+	action += fmt.Sprintf(" ccid=%v", options.AllowCCID)
 	if options.AllowCCID {
 		v.addLine(`usb.generic.allowCCID = "TRUE"`)
+		// possibly outdated VMX
+		//v.addLine(`usb.ccid.disable = "FALSE"`)
+	} else {
+		v.addLine(`usb.generic.allowCCID = "FALSE"`)
 	}
 
 	devices := map[string]string{
@@ -654,9 +689,14 @@ func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 				quirk += ":0x" + pid
 			}
 			//fmt.Printf("connect=%s quirk=%s autoclean=%s\n", connect, quirk, autoclean)
-			v.addLine(fmt.Sprintf(`usb_xhci.autoconnect.%s = "%s autoclean:%s"`, label, connect, autoclean))
+
+			// possibly outdated
+			//v.addLine(fmt.Sprintf(`usb.autoconnect.%s = "%s autoclean:%s"`, label, connect, autoclean))
+
+			v.addLine(fmt.Sprintf(`%s.autoconnect.%s = "%s autoclean:%s"`, prefix, label, connect, autoclean))
 			v.addLine(fmt.Sprintf(`usb.quirks.%s = "%s allow"`, label, quirk))
+			action += fmt.Sprintf(" %s=%s", label, ids)
 		}
 	}
-	return "Configured USB devices", nil
+	return action, nil
 }
