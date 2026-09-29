@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/ws"
+	"github.com/rstms/vmx/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +45,7 @@ var killCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		InitController()
 		vid := args[0]
-		options := ws.StopOptions{
+		options := controller.StopOptions{
 			Wait:     ViperGetBool("wait"),
 			PowerOff: true,
 		}

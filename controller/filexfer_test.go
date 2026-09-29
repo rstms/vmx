@@ -1,8 +1,9 @@
-package ws
+package controller
 
 import (
 	"github.com/rstms/winexec/client"
 	"github.com/stretchr/testify/require"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -18,10 +19,12 @@ func initClient(t *testing.T) *client.WinexecClient {
 }
 
 func TestFileDownload(t *testing.T) {
+	err := os.Mkdir(filepath.Join("testdata", "files"), 0700)
+	require.Nil(t, err)
 	c := initClient(t)
 	dst := filepath.Join("testdata", "files", "hosts")
 	src := "/c/windows/system32/drivers/etc/hosts"
-	err := c.Download(dst, src)
+	err = c.Download(dst, src)
 	require.Nil(t, err)
 }
 

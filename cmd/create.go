@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
-	"github.com/rstms/vmx/ws"
+	"github.com/rstms/vmx/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -55,9 +55,9 @@ unless specified with option flags.
 	},
 }
 
-func Create(name string) (ws.Controller, string, error) {
+func Create(name string) (controller.Controller, string, error) {
 
-	options := ws.NewCreateOptions()
+	options := controller.NewCreateOptions()
 
 	options.Wait = ViperGetBool("wait")
 	options.CpuCount = ViperGetInt("create.cpu")

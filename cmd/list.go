@@ -33,7 +33,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/rstms/vmx/ws"
+	"github.com/rstms/vmx/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -56,9 +56,9 @@ more detailed listing.
 		if len(args) > 0 {
 			vid = args[0]
 		}
-		iso, err := ws.IsIsoPath(vid)
+		iso, err := controller.IsIsoPath(vid)
 		cobra.CheckErr(err)
-		options := ws.FilesOptions{
+		options := controller.FilesOptions{
 			Detail: ViperGetBool("list.detail"),
 			All:    ViperGetBool("list.all"),
 			Iso:    iso,

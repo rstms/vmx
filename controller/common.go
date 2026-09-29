@@ -1,6 +1,6 @@
 // go-common local proxy functions
 
-package ws
+package controller
 
 import (
 	rstms "github.com/rstms/go-common"

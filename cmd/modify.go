@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rstms/vmx/ws"
+	"github.com/rstms/vmx/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +57,7 @@ Changes can be specified for multiple categories in a single command.
 		vm, err := vmx.Get(args[0])
 		cobra.CheckErr(err)
 
-		options := ws.CreateOptions{}
+		options := controller.CreateOptions{}
 
 		// initX functions depend on zero-values in CreateOptions
 
@@ -102,7 +102,7 @@ Changes can be specified for multiple categories in a single command.
 	},
 }
 
-func initETHOptions(options *ws.CreateOptions) error {
+func initETHOptions(options *controller.CreateOptions) error {
 
 	if ViperGetBool("modify.eth") {
 		options.ModifyNIC = true
@@ -124,7 +124,7 @@ func initETHOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initTTYOptions(options *ws.CreateOptions) error {
+func initTTYOptions(options *controller.CreateOptions) error {
 
 	ttyPipe := ViperGetString("modify.tty_pipe")
 	disable := ViperGetBool("modify.tty_disable")
@@ -152,7 +152,7 @@ func initTTYOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initVNCOptions(options *ws.CreateOptions) error {
+func initVNCOptions(options *controller.CreateOptions) error {
 	enable := ViperGetBool("modify.vnc_enable")
 	disable := ViperGetBool("modify.vnc_disable")
 	if enable && disable {
@@ -169,7 +169,7 @@ func initVNCOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initEFIOptions(options *ws.CreateOptions) error {
+func initEFIOptions(options *controller.CreateOptions) error {
 	bootEFI := ViperGetBool("modify.boot_efi")
 	bootBIOS := ViperGetBool("modify.boot_bios")
 	if bootEFI && bootBIOS {
@@ -185,7 +185,7 @@ func initEFIOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initShareOptions(options *ws.CreateOptions) error {
+func initShareOptions(options *controller.CreateOptions) error {
 	if ViperGetBool("modify.no_share") {
 		options.ModifyShare = true
 		return nil
@@ -204,7 +204,7 @@ func initShareOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initClipboardOptions(options *ws.CreateOptions) error {
+func initClipboardOptions(options *controller.CreateOptions) error {
 	if ViperGetBool("modify.clibboard") {
 		options.ModifyClipboard = true
 		options.ClipboardEnabled = true
@@ -216,7 +216,7 @@ func initClipboardOptions(options *ws.CreateOptions) error {
 	return nil
 }
 
-func initUSBOptions(options *ws.CreateOptions) error {
+func initUSBOptions(options *controller.CreateOptions) error {
 
 	if ViperGetBool("modify.no_usb") {
 		options.ModifyUSB = true

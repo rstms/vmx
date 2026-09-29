@@ -1,4 +1,4 @@
-package ws
+package controller
 
 type VmRestGetVmCpuRamResponse struct {
 	Cpu struct {

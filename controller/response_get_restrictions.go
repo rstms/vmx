@@ -1,4 +1,4 @@
-package ws
+package controller
 
 type VmRestGetVmRestrictionsResponse struct {
 	ApplianceView struct {

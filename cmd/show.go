@@ -33,7 +33,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/rstms/vmx/ws"
+	"github.com/rstms/vmx/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +51,7 @@ Display VM instance data
 		if len(args) > 0 {
 			vid = args[0]
 		}
-		options := ws.ShowOptions{
+		options := controller.ShowOptions{
 			Detail:  ViperGetBool("show.detail"),
 			Running: !ViperGetBool("show.all"),
 		}

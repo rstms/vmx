@@ -1,4 +1,4 @@
-package ws
+package controller
 
 /**
  * USB HID Keyboard scan codes as per USB spec 1.11

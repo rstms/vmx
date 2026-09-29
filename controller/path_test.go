@@ -1,4 +1,4 @@
-package ws
+package controller
 
 import (
 	"bytes"

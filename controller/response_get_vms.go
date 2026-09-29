@@ -1,4 +1,4 @@
-package ws
+package controller
 
 type VmRestGetVmsResponse []struct {
 	ID   string `json:"id,omitzero"`

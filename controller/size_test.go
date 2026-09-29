@@ -1,4 +1,4 @@
-package ws
+package controller
 
 import (
 	"github.com/stretchr/testify/require"
