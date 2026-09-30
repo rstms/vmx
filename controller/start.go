@@ -19,7 +19,7 @@ type StopOptions struct {
 }
 
 func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (string, error) {
-	if v.debug {
+	if true || v.debug {
 		log.Printf("Start(%s, options, isoOptions)\noptions: %s\nisoOptions: %s\n",
 			vid,
 			FormatJSON(options),
@@ -38,46 +38,22 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		return "already started", nil
 	}
 
-	var savedBootConnected bool
-	if isoOptions.ModifyISO {
-		var currentIsoOptions IsoOptions
-		err := v.cli.GetIsoOptions(&vm, &currentIsoOptions)
-		if err != nil {
-			return "", Fatal(err)
-		}
+	state := "disconnected"
+	isoOptions.ModifyISO = true
+	if isoOptions.IsoBootConnected || isoOptions.IsoPresent {
+		isoOptions.IsoPresent = true
+		isoOptions.IsoBootConnected = true
+		state = fmt.Sprintf("connected: %v", isoOptions.IsoFiles)
+	}
+	msg := fmt.Sprintf("[%s] starting with ISO %s", vid, state)
+	if v.verbose {
+		fmt.Println(msg)
+	}
+	log.Println(msg)
 
-		savedBootConnected = currentIsoOptions.IsoBootConnected
-
-		//log.Printf("start: current ISO Options: %+v\n", currentIsoOptions)
-		//log.Printf("start: new ISO Options: %+v\n", isoOptions)
-
-		if !isoOptions.ModifyBootConnected {
-			if isoOptions.IsoPresent != currentIsoOptions.IsoPresent {
-				msg := fmt.Sprintf("[%s] setting ISO present: %v", vm.Name, isoOptions.IsoPresent)
-				if v.verbose {
-					fmt.Println(msg)
-				}
-				log.Println(msg)
-			}
-			if isoOptions.IsoPresent && (isoOptions.IsoFile != currentIsoOptions.IsoFile) {
-				msg := fmt.Sprintf("[%s] setting ISO file: %s", vm.Name, isoOptions.IsoFile)
-				if v.verbose {
-					fmt.Println(msg)
-				}
-				log.Println(msg)
-			}
-		}
-		if !isoOptions.IsoBootConnected != currentIsoOptions.IsoBootConnected {
-			msg := fmt.Sprintf("[%s] setting ISO boot connected: %v", vm.Name, isoOptions.IsoBootConnected)
-			if v.verbose {
-				fmt.Println(msg)
-			}
-			log.Println(msg)
-		}
-		_, err = v.Modify(vid, CreateOptions{}, isoOptions)
-		if err != nil {
-			return "", Fatal(err)
-		}
+	_, err = v.Modify(vid, CreateOptions{}, isoOptions)
+	if err != nil {
+		return "", Fatal(err)
 	}
 
 	path, err := PathnameFormat(v.Remote, vm.Path)
@@ -85,27 +61,37 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		return "", Fatal(err)
 	}
 	command := ""
+	args := []string{}
+	env := []string{}
 	var visibility string
 	if options.FullScreen {
 		if v.Remote == "windows" {
-			command = "cmd /c start vmware >nul 2>nul -n -q -X " + path
+			command = "cmd"
+			args = append(args, "/c", "start", "vmware", ">nul", "2>nul", "-n", "-q", "-X", path)
 		} else {
-			command = "vmware -n -q -X " + path + "&"
+			command = "vmware"
+			args = append(args, "-n", "-q", "-X", path)
+			env = append(env, "DISPLAY=:0")
 		}
 		visibility = "fullscreen"
+		options.ModifyStretch = true
+		options.StretchEnabled = true
 	} else {
 		// TODO: add '-vp password' to vmrun command for encrypted VMs
 		if v.Remote == "windows" {
-			command = "cmd /c start /MIN vmrun -T ws start " + path
+			command = "cmd"
+			args = append(args, "/c", "start", "/MIN", "vmrun", "-T", "ws", "start", path)
 		} else {
-			command = "vmrun -T ws start " + path
+			command = "vmrun"
+			args = append(args, "-T", "ws", "start", path)
 		}
 		if options.Background {
 			visibility = "background"
-			command += " nogui"
+			args = append(args, "nogui")
 		} else {
 			visibility = "windowed"
-			command += " gui"
+			args = append(args, "gui")
+			env = append(env, "DISPLAY=:0")
 		}
 	}
 
@@ -120,7 +106,7 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		fmt.Printf("[%s] Requesting %s start\n", vm.Name, visibility)
 	}
 
-	err = v.RemoteSpawn(command, nil)
+	err = v.RemoteSpawn(command, args, &env, nil)
 	if err != nil {
 		return "", Fatal(err)
 	}
@@ -128,29 +114,33 @@ func (v *vmctl) Start(vid string, options StartOptions, isoOptions IsoOptions) (
 		fmt.Printf("[%s] Start request complete\n", vm.Name)
 	}
 
+	status := "start pending"
 	if options.Wait {
 		err := v.Wait(vid, "on")
 		if err != nil {
 			return "", Fatal(err)
 		}
-
-		if isoOptions.ModifyISO {
-			if savedBootConnected != isoOptions.IsoBootConnected {
-				msg := fmt.Sprintf("[%s] Restoring ISO boot-connected: %v", vm.Name, savedBootConnected)
-				if v.verbose {
-					fmt.Println(msg)
-				}
-				log.Println(msg)
-				err := v.cli.SetIsoStartConnected(&vm, savedBootConnected)
-				if err != nil {
-					return "", Fatal(err)
-				}
-			}
-		}
-
-		return "started", nil
+		status = "started"
 	}
-	return "start pending", nil
+	return status, nil
+}
+
+func (v *vmctl) disconnectISO(vid string) error {
+	isoOptions := IsoOptions{
+		ModifyISO:        true,
+		IsoPresent:       false,
+		IsoBootConnected: false,
+	}
+	_, err := v.Modify(vid, CreateOptions{}, isoOptions)
+	if err != nil {
+		return Fatal(err)
+	}
+	msg := fmt.Sprintf("[%s] ISO disconnected\n", vid)
+	log.Println(msg)
+	if v.verbose {
+		fmt.Println(msg)
+	}
+	return nil
 }
 
 func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
@@ -167,6 +157,10 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 		return "", Fatal(err)
 	}
 	if ok {
+		err := v.disconnectISO(vid)
+		if err != nil {
+			return "", Fatal(err)
+		}
 		return "already stopped", nil
 	}
 	path, err := PathnameFormat(v.Remote, vm.Path)
@@ -174,7 +168,8 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 		return "", Fatal(err)
 	}
 	// FIXME: may need -vp PASSWORD here for encrypted instances
-	command := "vmrun -T ws stop " + path
+	command := "vmrun"
+	args := []string{"-T", "ws", "stop", path}
 	action := "shutdown"
 	if options.PowerOff {
 		action = "forced power down"
@@ -183,7 +178,7 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 		fmt.Printf("[%s] Requesting %s\n", vm.Name, action)
 	}
 
-	_, err = v.RemoteExec(command, nil)
+	_, err = v.RemoteExec(command, args, nil, nil)
 	if err != nil {
 		return "", Fatal(err)
 	}
@@ -191,12 +186,18 @@ func (v *vmctl) Stop(vid string, options StopOptions) (string, error) {
 	if v.verbose {
 		fmt.Printf("[%s] %s request complete\n", vm.Name, action)
 	}
+
+	status := "stop pending"
 	if options.Wait {
 		err := v.Wait(vid, "off")
 		if err != nil {
 			return "", Fatal(err)
 		}
-		return "stopped", nil
+		status = "stopped"
 	}
-	return "stop pending", nil
+	err = v.disconnectISO(vid)
+	if err != nil {
+		return "", Fatal(err)
+	}
+	return status, nil
 }

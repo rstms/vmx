@@ -24,8 +24,9 @@ func dumpConfig(t *testing.T) {
 }
 
 func initTestConfig(t *testing.T) {
+	viper.Reset()
 	testFile := filepath.Join("testdata", "config.yaml")
-	Init("test", Version, testFile)
+	Init("vmx", Version, testFile)
 	ViperSet("debug", true)
 }
 
@@ -114,25 +115,46 @@ func TestPathCompare(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestFileListUnix(t *testing.T) {
+func TestFileListLocalUnix(t *testing.T) {
 	initTestConfig(t)
-	viper.Set("debug", true)
-	viper.Set("verbose", true)
-	viper.Set("relay", "")
-	viper.Set("hostname", "localhost")
+	fmt.Printf("before_viper: %s\n", FormatJSON(viper.AllSettings()))
+	ViperSet("hostname", "localhost")
+	ViperSet("shell", "sh")
 	v, err := NewVMXController()
 	require.Nil(t, err)
 	vmx := v.(*vmctl)
 	require.IsType(t, &vmctl{}, vmx)
-	lines, err := vmx.exec("sh", []string{"-c", "ls -l ."}, "", nil)
+	lines, err := vmx.LocalExec("ls", []string{"-l", "."}, nil, nil)
 	files, err := ParseFileList("unix", lines)
 	require.Nil(t, err)
 	require.NotEmpty(t, files)
 	for _, file := range files {
 		require.IsType(t, VMFile{}, file)
-		log.Printf("%v\n", file)
+		fmt.Printf("%v\n", file)
 	}
+	fmt.Printf("after_viper: %s\n", FormatJSON(viper.AllSettings()))
 
+}
+
+func TestFileListRemoteWinexec(t *testing.T) {
+	initTestConfig(t)
+	fmt.Printf("before_viper: %s\n", FormatJSON(viper.AllSettings()))
+	ViperSet("shell", "winexec")
+
+	fmt.Printf("viper: %s\n", FormatJSON(viper.AllSettings()))
+
+	v, err := NewVMXController()
+	require.Nil(t, err)
+	vmx := v.(*vmctl)
+	require.IsType(t, &vmctl{}, vmx)
+	require.Equal(t, "winexec", vmx.Shell)
+	lines, err := vmx.RemoteExec("dir", []string{"."}, nil, nil)
+	require.Nil(t, err)
+	require.NotEmpty(t, lines)
+	for _, line := range lines {
+		log.Printf("%s\n", line)
+	}
+	fmt.Printf("after_viper: %s\n", FormatJSON(viper.AllSettings()))
 }
 
 func TestIsIsoPath(t *testing.T) {

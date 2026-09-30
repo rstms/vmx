@@ -9,21 +9,21 @@ import (
 	"strings"
 )
 
-func (v *vmctl) LocalExec(command string, exitCode *int) ([]string, error) {
+func (v *vmctl) LocalExec(command string, args []string, env *[]string, exitCode *int) ([]string, error) {
 	if v.debug {
-		log.Printf("LocalExec('%s', %v)\n", command, exitCode)
+		log.Printf("LocalExec(command='%s', args=%v env=%v exitCode=%v) shell=%s\n", command, args, env, exitCode, v.Shell)
 	}
 	var shell string
-	var args []string
 	if v.Local == "windows" {
 		shell = "cmd"
-		args = []string{"/c", command}
+		args = []string{"/c", strings.Join(append([]string{command}, args...), " ")}
 	} else {
 		shell := os.Getenv("SHELL")
 		if shell == "" {
 			shell = "/bin/sh"
 		}
-		args = []string{"-c", command}
+		args = append([]string{command}, args...)
+		return v.exec(shell, []string{}, strings.Join(args, " "), exitCode)
 	}
 	return v.exec(shell, args, "", exitCode)
 }
@@ -32,15 +32,24 @@ func (v *vmctl) sshArgs() []string {
 	return []string{"-q", "-i", v.KeyFile, v.Username + "@" + v.Hostname}
 }
 
-func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
+func (v *vmctl) RemoteExec(command string, args []string, env *[]string, exitCode *int) ([]string, error) {
 	if v.debug {
-		log.Printf("RemoteExec('%s', %v)\n", command, exitCode)
+		log.Printf("RemoteExec(command='%s', args=%v env=%v exitCode=%v) shell=%s\n", command, args, env, exitCode, v.Shell)
+	}
+	envVars := []string{}
+	if env != nil {
+		envVars = *env
 	}
 	switch v.Shell {
 	case "winexec":
-		stdout, _, err := v.winexec.Exec("cmd", []string{"/c", command}, []string{}, exitCode)
+		err := v.checkWinexec()
 		if err != nil {
-			return []string{}, Fatal(err)
+			return nil, Fatal(err)
+		}
+		log.Printf("winexec=%+v\n", v.winexec)
+		stdout, _, err := v.winexec.Exec(command, args, envVars, exitCode)
+		if err != nil {
+			return nil, Fatal(err)
 		}
 		return strings.Split(strings.TrimSpace(stdout), "\n"), nil
 	case "ssh":
@@ -55,28 +64,38 @@ func (v *vmctl) RemoteExec(command string, exitCode *int) ([]string, error) {
 	case "cmd":
 		return v.exec(v.Shell, []string{"/c", command}, "", exitCode)
 	}
-	return []string{}, Fatalf("unexpected shell: %s", v.Shell)
+	return nil, Fatalf("unexpected shell: %s", v.Shell)
 }
 
-func (v *vmctl) RemoteSpawn(command string, exitCode *int) error {
+func (v *vmctl) RemoteSpawn(command string, args []string, env *[]string, exitCode *int) error {
 	if v.debug {
 		log.Printf("RemoteSpawn('%s', %v)\n", command, exitCode)
 	}
+	envVars := []string{}
+	if env != nil {
+		envVars = *env
+	}
 	switch v.Shell {
 	case "winexec":
-		return v.winexec.Spawn(command, []string{}, []string{}, exitCode)
+		err := v.checkWinexec()
+		if err != nil {
+			return Fatal(err)
+		}
+		return v.winexec.Spawn(command, args, envVars, exitCode)
 	case "ssh":
 		args := v.sshArgs()
 		if v.Remote == "windows" {
-			args = append(args, command)
-			command = ""
+			return Fatalf("unimplemented: ssh shell with windows host")
 		}
-		_, err := v.exec(v.Shell, args, command, exitCode)
-		return Fatal(err)
-	case "sh":
-		return v.spawn("/bin/sh", command, exitCode)
-	case "cmd":
-		return v.spawn("cmd", command, exitCode)
+		if len(envVars) != 0 {
+			return Fatalf("env not supported with ssh shell")
+		}
+		cmdLine := strings.Join(append([]string{command}, args...), " ") + "&"
+		_, err := v.exec("ssh", v.sshArgs(), cmdLine, exitCode)
+		if err != nil {
+			return Fatal(err)
+		}
+		return nil
 	}
 	return Fatalf("unexpected shell: %s", v.Shell)
 }

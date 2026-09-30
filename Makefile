@@ -41,11 +41,11 @@ release:
 	@$(if $(update),gh release delete -y v$(version),)
 	gh release create v$(version) --notes "v$(version)"
 
-update:
+update-modules:
 	@echo checking dependencies for updated versions 
 	@$(foreach module,$(rstms_modules),go get $(module)@$(call latest_module_release,$(module));)
 	curl -L -o cmd/common.go https://raw.githubusercontent.com/rstms/go-common/master/proxy_common_go
-	sed <cmd/common.go >ws/common.go 's/^package cmd/package ws/'
+	sed <cmd/common.go >controller/common.go 's/^package cmd/package controller/'
 
 logclean: 
 	echo >/var/log/vmx
@@ -62,3 +62,6 @@ sterile: clean
 
 certs:
 	scripts/generate_certs
+
+testcerts:
+	OUTPUT_DIR=controller/testdata/certs scripts/generate_certs

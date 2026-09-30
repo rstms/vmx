@@ -76,7 +76,7 @@ func (v *vmctl) sendBuf(vm *VM, buf string) error {
 	if err != nil {
 		return Fatal(err)
 	}
-	_, err = v.RemoteExec(fmt.Sprintf("vmcli %s mks sendKeySequence %s", path, buf), nil)
+	_, err = v.RemoteExec("vmcli", []string{path, "mks", "sendKeySequence", buf}, nil, nil)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -93,7 +93,9 @@ func (v *vmctl) sendCode(vm *VM, code, mod uint32) error {
 	}
 
 	code = code<<16 | 0x0007
-	_, err = v.RemoteExec(fmt.Sprintf("vmcli %s mks sendKeyEvent %d %d", path, code, mod), nil)
+	codestr := fmt.Sprintf("%d", code)
+	modstr := fmt.Sprintf("%d", mod)
+	_, err = v.RemoteExec("vmcli", []string{path, "mks", "sendKeyEvent", codestr, modstr}, nil, nil)
 	if err != nil {
 		return Fatal(err)
 	}

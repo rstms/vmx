@@ -106,7 +106,7 @@ func (v *VMX) Configure(options *CreateOptions, isoOptions *IsoOptions) ([]strin
 	}
 
 	if options.ModifyMemory {
-		action, err := v.SetMemory(options.MemorySize)
+		action, err := v.SetMemory(options.MemorySize, options.VramSize)
 
 		if err != nil {
 			return actions, Fatal(err)
@@ -281,10 +281,11 @@ func (v *VMX) SetCpu(cpuCount int) (string, error) {
 	return fmt.Sprintf("Set cpu count %d", cpuCount), nil
 }
 
-func (v *VMX) SetMemory(memorySize string) (string, error) {
+func (v *VMX) SetMemory(memorySize, vramSize string) (string, error) {
 	if v.debug {
-		log.Printf("SetMemory(%s)\n", memorySize)
+		log.Printf("SetMemory(%s, %s)\n", memorySize, vramSize)
 	}
+	v.removePrefix("svga.graphicsMemoryKB =")
 	v.removePrefix("memsize =")
 	v.removePrefix("memory.maxsize =")
 	size, err := SizeParse(memorySize)
@@ -293,7 +294,13 @@ func (v *VMX) SetMemory(memorySize string) (string, error) {
 	}
 	v.addLine(fmt.Sprintf(`memsize = "%d"`, size/MB))
 
-	return fmt.Sprintf("Set memory size %s", FormatSize(size)), nil
+	vsize, err := SizeParse(vramSize)
+	if err != nil {
+		return "", Fatal(err)
+	}
+	v.addLine(fmt.Sprintf(`svga.graphicsMemoryKB = "%d"`, vsize/KB))
+
+	return fmt.Sprintf("Set memory size %s / vram size %s", FormatSize(size), FormatSize(vsize)), nil
 }
 
 func (v *VMX) SetDisk(diskName string) (string, error) {
@@ -353,47 +360,42 @@ func (v *VMX) SetISO(options *IsoOptions) (string, error) {
 		log.Printf("SetISO(%+v)\n", *options)
 	}
 
-	if options.ModifyBootConnected {
-		for _, line := range v.lines {
-			m := ISO_FILENAME_PATTERN.FindStringSubmatch(line)
-			if len(m) == 2 {
-				options.IsoFile = m[1]
-			}
-			m = ISO_PRESENT_PATTERN.FindStringSubmatch(line)
-			if len(m) == 2 {
-				options.IsoPresent = m[1] == "TRUE"
-			}
-		}
-		//log.Printf("ModifyBootConected: %+v\n", *options)
-	}
-
-	v.removePrefix("ide1:0.")
-	if !options.IsoPresent {
-		v.addLine(`ide1:0.present = "FALSE"`)
-		return "iso=absent", nil
-	}
-
-	v.addLine(`ide1:0.present = "TRUE"`)
-	v.addLine(`ide1:0.deviceType = "cdrom-image"`)
-
-	normalized, err := PathNormalize(options.IsoFile)
-	if err != nil {
-		return "", Fatal(err)
-	}
-	action := fmt.Sprintf("iso=%s", normalized)
-	hostPath, err := PathFormat(v.hostOS, normalized)
-	if err != nil {
-		return "", Fatal(err)
-	}
-	v.addLine(`ide1:0.fileName = "` + hostPath + `"`)
 	if options.IsoBootConnected {
-		v.addLine(`ide1:0.startConnected = "TRUE"`)
-		action += " connected_at_boot"
-	} else {
-		v.addLine(`ide1:0.startConnected = "FALSE"`)
-		action += " disconnected_at_boot"
+		options.IsoPresent = true
 	}
-	return action, nil
+
+	v.removePrefix("sata0")
+	if !options.IsoPresent {
+		return "Removed boot ISO", nil
+	}
+	v.addLine(`sata0.present = "TRUE"`)
+
+	isoList := []string{}
+	var atBoot string
+	for i, file := range options.IsoFiles {
+		v.addLine(fmt.Sprintf(`sata0:%d.present = "TRUE"`, i))
+		v.addLine(fmt.Sprintf(`sata0:%d.deviceType = "cdrom-image"`, i))
+
+		normalized, err := PathNormalize(file)
+		if err != nil {
+			return "", Fatal(err)
+		}
+		hostPath, err := PathFormat(v.hostOS, normalized)
+		if err != nil {
+			return "", Fatal(err)
+		}
+		v.addLine(fmt.Sprintf(`sata0:%d.fileName = "`+hostPath+`"`, i))
+
+		if options.IsoBootConnected {
+			v.addLine(fmt.Sprintf(`sata0:%d.startConnected = "TRUE"`, i))
+			atBoot = "connected"
+		} else {
+			v.addLine(fmt.Sprintf(`sata0:%d.startConnected = "FALSE"`, i))
+			atBoot = "disconnected"
+		}
+		isoList = append(isoList, normalized)
+	}
+	return fmt.Sprintf("Set boot ISO '%s' [%s]", strings.Join(isoList, ";"), atBoot), nil
 }
 
 // FIXME: more NIC options could be modified

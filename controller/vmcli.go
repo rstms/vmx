@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const MAX_SATA_DEVICES = 9
+
 type VMConfig map[string]any
 
 type vmcli struct {
@@ -21,16 +23,18 @@ type vmcli struct {
 }
 
 func NewCliClient(v *vmctl) *vmcli {
+	log.Printf("NewCliClient\n")
 	c := vmcli{v: v, debug: ViperGetBool("debug")}
 	return &c
 }
 
-func (c *vmcli) exec(vm *VM, command string, result any) error {
+func (c *vmcli) exec(vm *VM, args []string, result any) error {
 	hostPath, err := PathnameFormat(c.v.Remote, vm.Path)
 	if err != nil {
 		return Fatal(err)
 	}
-	olines, err := c.v.RemoteExec(fmt.Sprintf("vmcli %s %s", command, hostPath), nil)
+	args = append([]string{hostPath}, args...)
+	olines, err := c.v.RemoteExec("vmcli", args, nil, nil)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -44,11 +48,11 @@ func (c *vmcli) exec(vm *VM, command string, result any) error {
 	return nil
 }
 
-func (c *vmcli) execCommand(name, command string, lines int) error {
+func (c *vmcli) execCommand(name, command string, args []string, lines int) error {
 	if c.v.debug {
-		fmt.Printf("[%s] %s\n", name, command)
+		log.Printf("[%s] %s %v\n", name, command, args)
 	}
-	olines, err := c.v.RemoteExec(command, nil)
+	olines, err := c.v.RemoteExec(command, args, nil, nil)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -88,13 +92,17 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 		return nil
 	}
 	files := make(map[string]bool)
-	switch c.v.Remote {
-	case "windows":
-		command := "dir /B /AD " + hostPath
-		dirs, err := c.v.RemoteExec(command, nil)
+	switch c.v.Shell {
+	case "winexec":
+		err := c.v.checkWinexec()
 		if err != nil {
 			return Fatal(err)
 		}
+		dirs, err := c.v.winexec.DirSubs(hostPath)
+		if err != nil {
+			return Fatal(err)
+		}
+
 		for _, dir := range dirs {
 			dir = strings.TrimSpace(dir)
 			if dir != "" {
@@ -103,18 +111,21 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 					return Fatal(err)
 				}
 				vmxFile := path.Join(vmPath, normalDir, normalDir+".vmx")
-				exists, err := c.windowsFileExists(vmxFile)
+				exists, err := c.v.winexec.IsFile(vmxFile)
 				if err != nil {
 					return Fatal(err)
 				}
 				if exists {
-					files[path.Join(vmPath, normalDir, normalDir+".vmx")] = true
+					files[vmxFile] = true
 				}
 			}
 		}
 	default:
-		command := fmt.Sprintf("find %s -maxdepth 2 -type f -name '*.vmx'", hostPath)
-		lines, err := c.v.RemoteExec(command, nil)
+		if c.v.Remote == "windows" {
+			return Fatalf("unexpected shell: %s", c.v.Shell)
+		}
+		args := []string{hostPath, "-maxdepth", "2", "-type", "f", "-name", "*.vmx"}
+		lines, err := c.v.RemoteExec("find", args, nil, nil)
 		if err != nil {
 			return Fatal(err)
 		}
@@ -131,25 +142,7 @@ func (c *vmcli) getPathVIDs(vmPath string) error {
 	return nil
 }
 
-func (c *vmcli) windowsFileExists(pathname string) (bool, error) {
-	hostPath, err := PathFormat(c.v.Remote, pathname)
-	if err != nil {
-		return false, Fatal(err)
-	}
-	var exitCode int
-	_, err = c.v.RemoteExec("dir >NUL 2>NUL "+hostPath, &exitCode)
-	if err != nil {
-		return false, Fatal(err)
-	}
-	if exitCode == 0 {
-		return true, nil
-	}
-	log.Printf("WARNING: not found: '%s'\n", pathname)
-	return false, nil
-}
-
 func (c *vmcli) newVID(pathname string) (*VID, error) {
-	//log.Printf("newVID %s\n", pathname)
 	vmxPath, err := PathNormalize(pathname)
 	if err != nil {
 		return nil, Fatal(err)
@@ -165,7 +158,7 @@ func (c *vmcli) newVID(pathname string) (*VID, error) {
 	}
 	current, ok := c.ById[vid.Id]
 	if ok {
-		return nil, Fatalf("VM exits: '%+v'", *current)
+		return nil, Fatalf("VM exists: '%+v'", *current)
 	}
 	c.ById[vid.Id] = &vid
 	c.ByName[vid.Name] = &vid
@@ -324,8 +317,7 @@ func (c *vmcli) GetParam(vm *VM, name string) (string, error) {
 }
 
 func (c *vmcli) SetParam(vm *VM, name, value string) error {
-	command := fmt.Sprintf("configParams SetEntry %s %s", name, value)
-	err := c.exec(vm, command, nil)
+	err := c.exec(vm, []string{"configParams", "SetEntry", name, value}, nil)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -337,7 +329,7 @@ func (c *vmcli) QueryPowerState(vm *VM) error {
 		log.Printf("[%s] QueryPowerState\n", vm.Name)
 	}
 	var state struct{ PowerState string }
-	err := c.exec(vm, "power query -f json", &state)
+	err := c.exec(vm, []string{"power", "query", "-f", "json"}, &state)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -351,7 +343,7 @@ func (c *vmcli) GetParams(vm *VM) (*VMConfig, error) {
 		log.Printf("[%s] GetParams\n", vm.Name)
 	}
 	var params VMConfig
-	err := c.exec(vm, "configParams query -f json", &params)
+	err := c.exec(vm, []string{"configParams", "query", "-f", "json"}, &params)
 	if err != nil {
 		if checkEncryptedError(vm, err) {
 			return &VMConfig{}, nil
@@ -507,71 +499,141 @@ func (c *vmcli) GetIsoOptions(vm *VM, options *IsoOptions) error {
 		return Fatal(err)
 	}
 	options.ModifyISO = true
-	options.IsoPresent, err = c.GetBool(config, "ide1:0.present", false)
+	options.IsoPresent = false
+	options.IsoFiles = []string{}
+	options.IsoBootConnected = false
+	sataPresent, err := c.GetBool(config, "sata0.present", false)
 	if err != nil {
 		return Fatal(err)
 	}
-	options.IsoFile, err = c.GetPath(config, "ide1:0.fileName", false)
-	if err != nil {
-		return Fatal(err)
+	if !sataPresent {
+		return nil
 	}
-	options.IsoBootConnected, err = c.GetBool(config, "ide1:0.startConnected", false)
-	if err != nil {
-		return Fatal(err)
+	// NOTE: any connected iso will set IsoBootConnected true
+	for i := 0; i < MAX_SATA_DEVICES; i++ {
+		devicePresent, err := c.GetBool(config, fmt.Sprintf("sata0.%d.present", i), false)
+		if err != nil {
+			return Fatal(err)
+		}
+		if !devicePresent {
+			continue
+		}
+		deviceType, err := c.GetString(config, fmt.Sprintf("sata0.%d.deviceType", i), true)
+		if err != nil {
+			return Fatal(err)
+		}
+		if deviceType != "cdrom-image" {
+			continue
+		}
+		file, err := c.GetPath(config, fmt.Sprintf("sata0.%d.fileName", i), true)
+		if err != nil {
+			return Fatal(err)
+		}
+		if file == "" {
+			continue
+		}
+		options.IsoFiles = append(options.IsoFiles, file)
+		connected, err := c.GetBool(config, fmt.Sprintf("sata0:%d.startConnected", i), false)
+		if err != nil {
+			return Fatal(err)
+		}
+		if connected {
+			options.IsoBootConnected = true
+		}
 	}
 	return nil
 }
 
 func (c *vmcli) GetIsoStartConnected(vm *VM) (bool, error) {
-	config, err := c.GetParams(vm)
+	options := IsoOptions{}
+	err := c.GetIsoOptions(vm, &options)
 	if err != nil {
 		return false, Fatal(err)
 	}
-	connected, err := c.GetBool(config, "ide1:0.startConnected", false)
-	if err != nil {
-		return false, Fatal(err)
-	}
-	return connected, nil
+	return options.IsoBootConnected, nil
 }
 
 func (c *vmcli) SetIsoStartConnected(vm *VM, connected bool) error {
-	label := "ide1:0"
-	command := fmt.Sprintf("disk setStartConnected %s %v", label, connected)
-	err := c.exec(vm, command, nil)
+	value := fmt.Sprintf("%v", connected)
+
+	config, err := c.GetParams(vm)
 	if err != nil {
 		return Fatal(err)
+	}
+	// set start-connected state on any configured cdrom-image sata devices
+	for i := 0; i < MAX_SATA_DEVICES; i++ {
+		devicePresent, err := c.GetBool(config, fmt.Sprintf("sata0.%d.present", i), false)
+		if err != nil {
+			return Fatal(err)
+		}
+		if !devicePresent {
+			continue
+		}
+		deviceType, err := c.GetString(config, fmt.Sprintf("sata0.%d.deviceType", i), true)
+		if err != nil {
+			return Fatal(err)
+		}
+		if deviceType != "cdrom-image" {
+			continue
+		}
+		err = c.exec(vm, []string{"disk", "setStartConnected", fmt.Sprintf("sata0:%d", i), value}, nil)
+		if err != nil {
+			return Fatal(err)
+		}
 	}
 	return nil
 }
 
 func (c *vmcli) SetIsoOptions(vm *VM, options *IsoOptions) error {
-	label := "ide1:0"
 
-	command := fmt.Sprintf("disk setPresent %s %v", label, options.IsoPresent)
-	err := c.exec(vm, command, nil)
+	config, err := c.GetParams(vm)
 	if err != nil {
 		return Fatal(err)
 	}
 
-	if !options.IsoPresent {
-		return nil
-	}
+	for i := 0; i < MAX_SATA_DEVICES; i++ {
 
-	hostPath, err := PathnameFormat(c.v.Remote, options.IsoFile)
-	if err != nil {
-		return Fatal(err)
-	}
+		isoPresent := fmt.Sprintf("%v", options.IsoPresent)
 
-	command = fmt.Sprintf("disk setBackingInfo %s cdrom_image %s false", label, hostPath)
-	err = c.exec(vm, command, nil)
-	if err != nil {
-		return Fatal(err)
-	}
+		devicePresent, err := c.GetBool(config, fmt.Sprintf("sata0.%d.present", i), false)
+		if err != nil {
+			return Fatal(err)
+		}
 
-	command = fmt.Sprintf("disk setStartConnected %s %v", label, options.IsoBootConnected)
-	err = c.exec(vm, command, nil)
-	if err != nil {
-		return Fatal(err)
+		device := fmt.Sprintf("sata0:%d", i)
+
+		switch {
+		case i >= len(options.IsoFiles):
+			if devicePresent {
+				err := c.exec(vm, []string{"disk", "setPresent", device, "false"}, nil)
+				if err != nil {
+					return Fatal(err)
+				}
+			}
+		default:
+			err := c.exec(vm, []string{"disk", "setPresent", device, isoPresent}, nil)
+			if err != nil {
+				return Fatal(err)
+			}
+			if options.IsoPresent {
+
+				hostISOPath, err := PathnameFormat(c.v.Remote, options.IsoFiles[i])
+				if err != nil {
+					return Fatal(err)
+				}
+
+				err = c.exec(vm, []string{"disk", "setBackingInfo", device, "cdrom_image", hostISOPath, "false"}, nil)
+				if err != nil {
+					return Fatal(err)
+				}
+
+				startConnected := fmt.Sprintf("%v", options.IsoBootConnected)
+				err = c.exec(vm, []string{"disk", "setStartConnected", device, startConnected}, nil)
+				if err != nil {
+					return Fatal(err)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -599,14 +661,46 @@ func (c *vmcli) Create(name, guestOS string) (*VM, error) {
 		return nil, Fatal(err)
 	}
 
-	mkdirCommand := "mkdir " + hostPath
-	_, err = c.v.RemoteExec(mkdirCommand, nil)
-	if err != nil {
-		return nil, Fatal(err)
+	switch c.v.Shell {
+	case "winexec":
+		err := c.v.checkWinexec()
+		if err != nil {
+			return nil, Fatal(err)
+		}
+		exists, err := c.v.winexec.IsDir(hostPath)
+		if err != nil {
+			return nil, Fatal(err)
+		}
+		if exists {
+			log.Printf("directory exists: %s\n", hostPath)
+			entries, err := c.v.winexec.DirEntries(hostPath)
+			if err != nil {
+				return nil, Fatal(err)
+			}
+			if len(entries) == 0 {
+				log.Printf("removing empty directory: %s\n", hostPath)
+				err := c.v.winexec.RemoveAll(hostPath)
+				if err != nil {
+					return nil, Fatal(err)
+				}
+			}
+		}
+		err = c.v.winexec.MkdirAll(hostPath, 0700)
+		if err != nil {
+			return nil, Fatal(err)
+		}
+	default:
+		if c.v.Remote == "windows" {
+			return nil, Fatalf("unexpected shell: %s", c.v.Shell)
+		}
+		_, err = c.v.RemoteExec("mkdir", []string{hostPath}, nil, nil)
+		if err != nil {
+			return nil, Fatal(err)
+		}
 	}
 
 	// use vmcli to create the VM instance
-	err = c.execCommand(name, fmt.Sprintf("vmcli VM Create -n %s -d %s %s %s", name, hostPath, guestFlag, guestValue), 1)
+	err = c.execCommand(name, "vmcli", []string{"VM", "Create", "-n", name, "-d", hostPath, guestFlag, guestValue}, 1)
 	if err != nil {
 		return nil, Fatal(err)
 	}
@@ -646,7 +740,8 @@ func (c *vmcli) CreateDisk(vm *VM, diskName, size string, singleFile, preallocat
 	}
 	adapter := "lsilogic"
 	diskType := ParseDiskType(singleFile, preallocated)
-	err = c.execCommand(vm.Name, fmt.Sprintf("vmcli Disk Create -f %s -a %s -s %s -t %d", hostPathname, adapter, size, int(diskType)), 0)
+	diskTypeStr := fmt.Sprintf("%d", int(diskType))
+	err = c.execCommand(vm.Name, "vmcli", []string{"Disk", "Create", "-f", hostPathname, "-a", adapter, "-s", size, "-t", diskTypeStr}, 0)
 	if err != nil {
 		return Fatal(err)
 	}
@@ -655,22 +750,29 @@ func (c *vmcli) CreateDisk(vm *VM, diskName, size string, singleFile, preallocat
 
 // DANGER, WILL ROBINSON! - delete the instance's virtual disk file
 func (c *vmcli) DeleteDisk(vm *VM, diskName string) error {
-
 	_, hostPathname, err := c.diskPathnames(vm, diskName)
 	if err != nil {
 		return Fatal(err)
 	}
-
-	var command string
-	switch c.v.Remote {
-	case "windows":
-		command = "del " + hostPathname
+	log.Printf("DeleteDisk: vm=%s, diskName=%s hostPathname=%s\n", vm.Name, diskName, hostPathname)
+	switch c.v.Shell {
+	case "winexec":
+		err := c.v.checkWinexec()
+		if err != nil {
+			return Fatal(err)
+		}
+		err = c.v.winexec.DeleteFile(hostPathname)
+		if err != nil {
+			return Fatal(err)
+		}
 	default:
-		command = "rm " + hostPathname
-	}
-	err = c.execCommand(vm.Name, command, 0)
-	if err != nil {
-		return Fatal(err)
+		if c.v.Remote == "windows" {
+			return Fatalf("unexpected shell: %s", c.v.Shell)
+		}
+		err = c.execCommand(vm.Name, "rm", []string{hostPathname}, 0)
+		if err != nil {
+			return Fatal(err)
+		}
 	}
 	return nil
 }

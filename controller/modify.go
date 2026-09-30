@@ -18,6 +18,7 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 	}
 
 	err = v.requirePowerState(&vm, "off", "modify the instance")
+
 	if err != nil {
 		return nil, Fatal(err)
 	}
@@ -33,23 +34,16 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 	}
 
 	if isoOptions.ModifyISO {
-		if isoOptions.IsoFile != "" {
-			err := v.CheckISODownload(&vm, &isoOptions)
+		if len(isoOptions.IsoFiles) > 0 {
+			isoFiles, err := v.CheckISODownload(&vm, &isoOptions)
 			if err != nil {
 				return nil, Fatal(err)
 			}
-			formatted, err := FormatIsoPathname(v.IsoPath, isoOptions.IsoFile)
-			if err != nil {
-				return nil, Fatal(err)
-			}
-			isoOptions.IsoFile = formatted
+			isoOptions.IsoFiles = isoFiles
 		}
 	}
 
 	actions, err := vmx.Configure(&options, &isoOptions)
-	if err != nil {
-		return nil, Fatal(err)
-	}
 
 	editedData, err := vmx.Read()
 	if err != nil {

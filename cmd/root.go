@@ -128,7 +128,7 @@ func OutputInstanceState(vid, result string) {
 
 func InitIsoOptions() (*controller.IsoOptions, error) {
 
-	options := controller.IsoOptions{}
+	options := controller.NewIsoOptions()
 	iso := ViperGetString("iso")
 	enable := iso != ""
 	disable := ViperGetBool("iso_disable")
@@ -154,7 +154,7 @@ func InitIsoOptions() (*controller.IsoOptions, error) {
 		options.ModifyISO = true
 		options.ModifyBootConnected = false
 		options.IsoPresent = true
-		options.IsoFile = iso
+		options.IsoFiles = append(options.IsoFiles, iso)
 		options.IsoBootConnected = true
 		options.IsoCA = ViperGetString("iso_ca")
 		options.IsoClientCert = ViperGetString("iso_cert")

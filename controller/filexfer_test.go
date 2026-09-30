@@ -10,22 +10,26 @@ import (
 
 func initClient(t *testing.T) *client.WinexecClient {
 	initTestConfig(t)
-	ca := ViperGetString("winexec.client.ca")
-	cert := ViperGetString("winexec.client.cert")
-	key := ViperGetString("winexec.client.key")
-	c, err := client.NewWinexecClient(ca, cert, key)
+	c, err := client.NewWinexecClient("winexec.client")
 	require.Nil(t, err)
 	return c
 }
 
 func TestFileDownload(t *testing.T) {
-	err := os.Mkdir(filepath.Join("testdata", "files"), 0700)
+	filesDir := filepath.Join("testdata", "files")
+	if IsDir(filesDir) {
+		err := os.RemoveAll(filesDir)
+		require.Nil(t, err)
+	}
+	err := os.Mkdir(filesDir, 0700)
 	require.Nil(t, err)
 	c := initClient(t)
-	dst := filepath.Join("testdata", "files", "hosts")
+	dst := filepath.Join(filesDir, "hosts")
 	src := "/c/windows/system32/drivers/etc/hosts"
 	err = c.Download(dst, src)
 	require.Nil(t, err)
+	exists := IsFile(dst)
+	require.True(t, exists)
 }
 
 func TestFileUpload(t *testing.T) {

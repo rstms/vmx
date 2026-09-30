@@ -8,4 +8,6 @@ cruft
 *.log
 *postactivate
 config.yaml
-ws/testdata/files
+controller/testdata/files
+controller/testdata/certs
+

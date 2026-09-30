@@ -1,10 +1,15 @@
 #!/bin/sh
-program=$(basename $(pwd))
-dir=$HOME/.config/$program
-mkdir -p $dir
-echo updating certificates in $dir
+set -ue
+OUTPUT_DIR=${OUTPUT_DIR:-$HOME/.config/$(basename $(pwd))}
+DURATION=${DURATION:-1d}
+CA_NAME=${CA_NAME:-keymaster.pem}
+SUBJECT=${SUBJECT:-winexec_client}
+
+echo Updating $SUBJECT certificates in $OUTPUT_DIR
+mkdir -p $OUTPUT_DIR
 (
-    cd $dir
-    mkcert --force --chain ca.pem
-    mkcert --force vmx --cert-file client_cert.pem --key-file client_key.pem --duration 1d
+    cd $OUTPUT_DIR
+    mkcert --force --chain $CA_NAME
+    mkcert --force $SUBJECT --duration $DURATION
+    ls -lt
 )

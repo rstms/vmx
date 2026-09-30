@@ -17,9 +17,11 @@ func (v *vmctl) Show(name string, options ShowOptions) (*[]VMState, error) {
 
 	vids := []*VID{}
 
+	// FIXME: do we need to switch on v.Shell?
+
 	if name == "" && options.Running {
 		// we only need the running vms, so spoof vids with only the Name using vmrun output
-		olines, err := v.RemoteExec("vmrun list", nil)
+		olines, err := v.RemoteExec("vmrun", []string{"list"}, nil, nil)
 		if err != nil {
 			return nil, Fatal(err)
 		}

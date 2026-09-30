@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"log"
 	"path"
 	"regexp"
@@ -20,7 +21,7 @@ type FilesOptions struct {
 
 func (v *vmctl) Files(vid string, options FilesOptions) ([]string, error) {
 	if v.debug {
-		log.Printf("Files(%s, %+v)\n", vid, options)
+		log.Printf("Files: vid='%s', options=%s\n", vid, FormatJSON(options))
 	}
 
 	lines := []string{}
@@ -94,25 +95,36 @@ func (v *vmctl) listFiles(listPath string, detail bool, pattern *regexp.Regexp) 
 		return lines, Fatal(err)
 	}
 
-	var command string
-	if v.Remote == "windows" {
-		if detail {
-			command = "dir /-C " + hostPath
-
-		} else {
-			command = "dir /B " + hostPath
+	olines := []string{}
+	switch v.Shell {
+	case "winexec":
+		err := v.checkWinexec()
+		if err != nil {
+			return nil, Fatal(err)
 		}
-	} else {
-		if detail {
-			command = "ls -al " + hostPath
-		} else {
-			command = "ls " + hostPath
+		entries, err := v.winexec.DirEntries(hostPath)
+		if err != nil {
+			return nil, Fatal(err)
 		}
-	}
-
-	olines, err := v.RemoteExec(command, nil)
-	if err != nil {
-		return lines, Fatal(err)
+		for _, entry := range entries {
+			if detail {
+				olines = append(olines, fmt.Sprintf("%+v", entry))
+			} else {
+				olines = append(olines, entry.Name)
+			}
+		}
+	default:
+		if v.Remote == "windows" {
+			return nil, Fatalf("unexpected shell: %s", v.Shell)
+		}
+		args := []string{}
+		if detail {
+			args = []string{"-a", "-l"}
+		}
+		olines, err = v.RemoteExec("ls", args, nil, nil)
+		if err != nil {
+			return nil, Fatal(err)
+		}
 	}
 
 	log.Printf("listFiles pattern: %+v\n", pattern)

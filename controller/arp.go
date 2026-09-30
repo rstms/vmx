@@ -26,19 +26,21 @@ func ArpScan(mac string, lines []string) (string, error) {
 
 func (v *vmctl) ArpQuery(vm *VM) (string, error) {
 	//log.Printf("trying arp query for %s\n", vm.MacAddress)
-	var command string
+	command := "apr"
+	args := []string{}
 	switch v.Remote {
 	case "windows":
-		command = "arp -a"
+		args = append(args, "-a")
 	case "openbsd":
-		command = "arp -an"
+		args = append(args, "-an")
 	case "linux":
-		command = "arp -n"
+		command = "/sbin/arp"
+		args = append(args, "-n")
 	default:
 		log.Printf("WARNING: arp query not implemented for remote os: '%s'", v.Remote)
 		return "", nil
 	}
-	lines, err := v.RemoteExec(command, nil)
+	lines, err := v.RemoteExec(command, args, nil, nil)
 	if err != nil {
 		return "", Fatal(err)
 	}

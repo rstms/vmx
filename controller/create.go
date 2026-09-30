@@ -19,6 +19,7 @@ type CreateOptions struct {
 
 	ModifyMemory bool
 	MemorySize   string
+	VramSize     string
 
 	ModifyDisk       bool
 	DiskName         string
@@ -82,6 +83,7 @@ func NewCreateOptions() *CreateOptions {
 		CpuCount:        1,
 		ModifyMemory:    true,
 		MemorySize:      "1G",
+		VramSize:        "512M",
 		ModifyDisk:      true,
 		DiskSize:        "16G",
 		ModifyEFI:       true,
@@ -188,16 +190,24 @@ func (v *vmctl) Destroy(vid string, options DestroyOptions) error {
 		return Fatal(err)
 	}
 	hostPath = strings.TrimRight(hostPath, "/\\")
-	var command string
-	switch v.Remote {
-	case "windows":
-		command = "rmdir /S /Q " + hostPath
+	switch v.Shell {
+	case "winexec":
+		err := v.checkWinexec()
+		if err != nil {
+			return Fatal(err)
+		}
+		err = v.winexec.RemoveAll(hostPath)
+		if err != nil {
+			return Fatal(err)
+		}
 	default:
-		command = "rm -rf " + hostPath
-	}
-	_, err = v.RemoteExec(command, nil)
-	if err != nil {
-		return Fatal(err)
+		if v.Remote == "windows" {
+			return Fatalf("unexpected shell: %s", v.Shell)
+		}
+		_, err = v.RemoteExec("rm", []string{"-r", "-f", hostPath}, nil, nil)
+		if err != nil {
+			return Fatal(err)
+		}
 	}
 	return nil
 }

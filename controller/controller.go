@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"github.com/rstms/winexec/client"
 	"log"
-	"os"
 	"os/user"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -127,23 +125,29 @@ type vmctl struct {
 	TimeoutSeconds  int64
 }
 
+// deferred init of winexec client
+func (v *vmctl) checkWinexec() error {
+
+	if v.winexec == nil {
+		var err error
+		v.winexec, err = client.NewWinexecClient("winexec.client")
+		if err != nil {
+			v.winexec = nil
+			return Fatal(err)
+		}
+	}
+	return nil
+}
+
 // return true if VMWare Workstation Host is localhost
 func (v *vmctl) isLocal() (bool, error) {
-	if v.Hostname == "" || v.Hostname == "localhost" || v.Hostname == "127.0.0.1" {
-		return true, nil
-	}
-	fqdn, err := os.Hostname()
+	host, _, fqdn, err := GetHostnameDetail()
 	if err != nil {
 		return false, Fatal(err)
 	}
-	if v.Hostname == fqdn {
+	switch v.Hostname {
+	case "", "localhost", "127.0.0.1", host, fqdn:
 		return true, nil
-	}
-	host, _, ok := strings.Cut(fqdn, ".")
-	if ok {
-		if v.Hostname == host {
-			return true, nil
-		}
 	}
 	return false, nil
 }
@@ -152,37 +156,51 @@ func (v *vmctl) detectRemoteOS() (string, error) {
 	if v.debug {
 		log.Println("detectRemoteOS")
 	}
-	olines, err := v.exec("ssh", append(v.sshArgs(), "env"), "", nil)
-	if err != nil {
-		return "", Fatal(err)
-	}
-	for _, line := range olines {
-		if WINDOWS_ENV_PATTERN.MatchString(strings.ToUpper(line)) {
-			return "windows", nil
+	var os string
+	switch v.Shell {
+	case "cmd", "sh":
+		return runtime.GOOS, nil
+	case "ssh":
+		olines, err := v.exec("ssh", append(v.sshArgs(), "env"), "", nil)
+		if err != nil {
+			return "", Fatal(err)
+		}
+		for _, line := range olines {
+			if WINDOWS_ENV_PATTERN.MatchString(strings.ToUpper(line)) {
+				return "windows", nil
+			}
+		}
+		olines, err = v.exec("ssh", append(v.sshArgs(), "uname"), "", nil)
+		if err != nil {
+			return "", Fatal(err)
+		}
+		if len(olines) != 1 {
+			return "", Fatalf("unexpected uname response: %v", olines)
+		}
+		os = strings.ToLower(olines[0])
+
+	case "winexec":
+		err := v.checkWinexec()
+		if err != nil {
+			return "", Fatal(err)
+		}
+
+		os, err = v.winexec.GetOS()
+		if err != nil {
+			return "", Fatal(err)
 		}
 	}
-	olines, err = v.exec("ssh", append(v.sshArgs(), "uname"), "", nil)
-	if err != nil {
-		return "", Fatal(err)
-	}
-	if len(olines) != 1 {
-		return "", Fatalf("unexpected uname response: %v", olines)
-	}
-	return strings.ToLower(olines[0]), nil
+	return os, nil
 }
 
 func NewVMXController() (Controller, error) {
 
 	var prefix string
 	if ProgramName() != "vmx" {
-		prefix = "vmx."
+		prefix = "host.vmware.vmx."
 	}
 
 	user, err := user.Current()
-	if err != nil {
-		return nil, Fatal(err)
-	}
-	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, Fatal(err)
 	}
@@ -190,13 +208,12 @@ func NewVMXController() (Controller, error) {
 	ViperSetDefault(prefix+"host", "localhost")
 	ViperSetDefault(prefix+"vmware_roots", []string{"/var/vmware"})
 	ViperSetDefault(prefix+"iso_path", "/var/vmware/iso")
+	fmt.Printf("disable_keepalives: prefix=%s\n", prefix)
 	ViperSetDefault(prefix+"disable_keepalives", true)
 	ViperSetDefault(prefix+"interval_seconds", DEFAULT_INTERVAL_SECONDS)
 	ViperSetDefault(prefix+"timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
 	ViperSetDefault(prefix+"user", user.Username)
-	ViperSetDefault(prefix+"ca", filepath.Join(configDir, ProgramName(), "keymaster.pem"))
-	ViperSetDefault(prefix+"cert", filepath.Join(configDir, ProgramName(), "winexec-client.pem"))
-	ViperSetDefault(prefix+"key", filepath.Join(configDir, ProgramName(), "winexec-client.key"))
+	ViperSetDefault(prefix+"shell", "winexec")
 
 	v := vmctl{
 		Hostname:        ViperGetString(prefix + "host"),
@@ -235,34 +252,28 @@ func NewVMXController() (Controller, error) {
 		v.Remote = v.Local
 		switch v.Local {
 		case "windows":
-			v.Shell = "cmd"
+			ViperSetDefault(prefix+"shell", "cmd")
 		default:
-			v.Shell = "sh"
+			ViperSetDefault(prefix+"shell", "sh")
 		}
-	} else {
-		v.Shell = ViperGetString(prefix + "shell")
-		switch v.Shell {
-		case "winexec":
-			ca := ViperGetString(prefix + "ca")
-			cert := ViperGetString(prefix + "cert")
-			key := ViperGetString(prefix + "key")
-			w, err := client.NewWinexecClient(ca, cert, key)
-			if err != nil {
-				return nil, Fatal(err)
+	}
+	v.Shell = ViperGetString(prefix + "shell")
+
+	if v.Shell == "winexec" {
+		for _, key := range []string{"url", "scheme", "hostname", "https_port", "path"} {
+			value := ViperGetString(prefix + key)
+			if value != "" {
+				ViperSet("winexec.client."+key, value)
 			}
-			v.winexec = w
-			v.Remote = "windows"
-		case "ssh":
-			v.Shell = "ssh"
-			remote, err := v.detectRemoteOS()
-			if err != nil {
-				return nil, Fatal(err)
-			}
-			if v.debug {
-				log.Printf("detected remote os: %s\n", remote)
-			}
-			v.Remote = remote
 		}
+	}
+
+	v.Remote, err = v.detectRemoteOS()
+	if err != nil {
+		return nil, Fatal(err)
+	}
+	if v.debug {
+		log.Printf("detected remote os: %s\n", v.Remote)
 	}
 	v.mapVMKeys()
 	if v.debug {
@@ -741,7 +752,7 @@ func (v *vmctl) getIpAddress(vm *VM) error {
 		return Fatal(err)
 	}
 	var exitCode int
-	olines, err := v.RemoteExec("vmrun getGuestIpAddress "+path, &exitCode)
+	olines, err := v.RemoteExec("vmrun", []string{"getGuestIpAddress", path}, nil, &exitCode)
 	if err != nil {
 		return Fatal(err)
 	}
