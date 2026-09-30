@@ -126,6 +126,10 @@ func (v *vmctl) CheckISODownload(vm *VM, options *IsoOptions) ([]string, error) 
 				}
 				isoPathname = localizedIsoPathname
 			case v.Shell == "winexec":
+				err := v.checkWinexec()
+				if err != nil {
+					return nil, Fatal(err)
+				}
 				exists, err := v.winexec.IsFile(isoPathname)
 				if err != nil {
 					return nil, Fatal(err)

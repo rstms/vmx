@@ -46,7 +46,9 @@ func (v *vmctl) RemoteExec(command string, args []string, env *[]string, exitCod
 		if err != nil {
 			return nil, Fatal(err)
 		}
-		log.Printf("winexec=%+v\n", v.winexec)
+		if v.debug {
+			log.Printf("winexec=%+v\n", v.winexec)
+		}
 		stdout, _, err := v.winexec.Exec(command, args, envVars, exitCode)
 		if err != nil {
 			return nil, Fatal(err)

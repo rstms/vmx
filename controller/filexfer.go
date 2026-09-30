@@ -116,6 +116,10 @@ func (v *vmctl) DownloadFile(vm *VM, localDestPathname, remoteSourcePathname str
 	}
 	switch v.Shell {
 	case "winexec":
+		err := v.checkWinexec()
+		if err != nil {
+			return Fatal(err)
+		}
 		err = v.winexec.Download(localDest, remoteSource)
 		if err != nil {
 			return Fatal(err)
@@ -176,6 +180,10 @@ func (v *vmctl) UploadFile(vm *VM, localSourcePathname, remoteDestPathname strin
 
 	switch v.Shell {
 	case "winexec":
+		err := v.checkWinexec()
+		if err != nil {
+			return Fatal(err)
+		}
 		err = v.winexec.Upload(remoteDest, localSource, true)
 		if err != nil {
 			return Fatal(err)
