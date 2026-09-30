@@ -26,7 +26,7 @@ func ArpScan(mac string, lines []string) (string, error) {
 
 func (v *vmctl) ArpQuery(vm *VM) (string, error) {
 	//log.Printf("trying arp query for %s\n", vm.MacAddress)
-	command := "apr"
+	command := "arp"
 	args := []string{}
 	switch v.Remote {
 	case "windows":

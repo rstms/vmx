@@ -208,7 +208,6 @@ func NewVMXController() (Controller, error) {
 	ViperSetDefault(prefix+"host", "localhost")
 	ViperSetDefault(prefix+"vmware_roots", []string{"/var/vmware"})
 	ViperSetDefault(prefix+"iso_path", "/var/vmware/iso")
-	fmt.Printf("disable_keepalives: prefix=%s\n", prefix)
 	ViperSetDefault(prefix+"disable_keepalives", true)
 	ViperSetDefault(prefix+"interval_seconds", DEFAULT_INTERVAL_SECONDS)
 	ViperSetDefault(prefix+"timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
