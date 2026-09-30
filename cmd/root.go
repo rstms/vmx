@@ -52,7 +52,7 @@ const (
 var vmx controller.Controller
 
 var rootCmd = &cobra.Command{
-	Version: "0.1.29",
+	Version: "0.1.30",
 	Use:     "vmx",
 	Short:   "control VMWare Workstation instances",
 	Long: `
