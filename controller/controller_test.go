@@ -35,4 +35,9 @@ func TestControllerList(t *testing.T) {
 	vmx, err := NewVMXController()
 	require.Nil(t, err)
 	fmt.Printf("controller: %+v\n", vmx)
+	lines, err := vmx.Files("", FilesOptions{})
+	require.Nil(t, err)
+	for i, line := range lines {
+		fmt.Printf("%d %s\n", i, line)
+	}
 }
