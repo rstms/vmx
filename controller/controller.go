@@ -225,7 +225,10 @@ func NewVMXController() (Controller, error) {
 		TimeoutSeconds:  ViperGetInt64(prefix + "timeout_seconds"),
 	}
 
-	roots := ViperGetStringSlice(prefix + "vmware_roots")
+	roots, err := processRoots(ViperGet(prefix + "vmware_roots"))
+	if err != nil {
+		return nil, Fatal(err)
+	}
 	v.Roots = make([]string, len(roots))
 	for i, root := range roots {
 		normalized, err := PathNormalize(root)
@@ -283,6 +286,30 @@ func NewVMXController() (Controller, error) {
 		log.Printf("isLocal=%v shell=%s local=%s remote=%s\n", local, v.Shell, v.Local, v.Remote)
 	}
 	return &v, nil
+}
+
+func processRoots(rawRoots interface{}) ([]string, error) {
+	roots := []string{}
+	switch t := rawRoots.(type) {
+	case string:
+		roots = append(roots, rawRoots.(string))
+	case []string:
+		roots = rawRoots.([]string)
+	case []interface{}:
+		for _, root := range rawRoots.([]interface{}) {
+			roots = append(roots, root.(string))
+		}
+	default:
+		return nil, Fatalf("unexpected vmware_roots type: %v", t)
+	}
+	splitRoots := []string{}
+	for _, root := range roots {
+		fields := strings.Split(root, ",")
+		for _, field := range fields {
+			splitRoots = append(splitRoots, field)
+		}
+	}
+	return splitRoots, nil
 }
 
 func (v *vmctl) Close() error {

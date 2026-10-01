@@ -32,6 +32,7 @@ func initTestConfig(t *testing.T) {
 
 func TestControllerList(t *testing.T) {
 	initTestConfig(t)
+	ViperSet("verbose", true)
 	vmx, err := NewVMXController()
 	require.Nil(t, err)
 	fmt.Printf("controller: %+v\n", vmx)
