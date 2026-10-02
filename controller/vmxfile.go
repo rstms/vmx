@@ -685,6 +685,9 @@ func ParseUSBDevice(value string) (*USBDevice, error) {
 	fields := strings.Split(value, " ")
 	log.Printf("fields=%+v\n", fields)
 	for _, field := range fields {
+		if field == "autoclean" {
+			field = "autoclean:1"
+		}
 		vidMatch := VID_PATTERN.FindStringSubmatch(field)
 		pidMatch := PID_PATTERN.FindStringSubmatch(field)
 		vidPidMatch := VIDPID_PATTERN.FindStringSubmatch(field)
