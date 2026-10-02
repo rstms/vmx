@@ -68,3 +68,8 @@ func TestControllerParseUSB(t *testing.T) {
 	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 2))
 	log.Printf("%s\n", device.FormatQuirksLine(2))
 }
+
+func TestControllerRegex(t *testing.T) {
+	match := VID_PATTERN.FindStringSubmatch("0xabcd")
+	require.Equal(t, 2, len(match))
+}

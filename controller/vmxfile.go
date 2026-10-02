@@ -11,11 +11,12 @@ var DISPLAY_NAME = regexp.MustCompile(`^displayName = "([^"]+)"`)
 var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
 var ISO_FILENAME_PATTERN = regexp.MustCompile(`^ide1:0\.fileName = "([^"]*)"`)
 var ISO_PRESENT_PATTERN = regexp.MustCompile(`^ide1:0\.present = "([^"]*)"`)
-var VID_PATTERN = regexp.MustCompile(`^vid[:-]:(?:0x)*([[:xdigit:]]{4})$`)
-var PID_PATTERN = regexp.MustCompile(`^pid[:-](?:0x)*([[:xdigit:]]{4})$`)
+
+var VID_PATTERN = regexp.MustCompile(`^(?:vid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
+var PID_PATTERN = regexp.MustCompile(`^(?:pid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
+var VIDPID_PATTERN = regexp.MustCompile(`^(?:vid[:-])*(?:0x)*([[:xdigit:]]{4})[:-]*(?:pid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
+
 var AUTOCLEAN_PATTERN = regexp.MustCompile(`^autoclean[:-]([01])$`)
-var VIDPID_PATTERN = regexp.MustCompile(`^(?:0x)*([[:xdigit:]]{4})[:-](?:0x)*([[:xdigit:]]{4})$`)
-var VIDONLY_PATTERN = regexp.MustCompile(`^(?:0x)*([[:xdigit:]]{4})$`)
 var HEX4_PATTERN = regexp.MustCompile(`^[[:xdigit:]]{4}$`)
 
 const USB_DEVICE_COUNT = 4
@@ -682,27 +683,27 @@ func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 func ParseUSBDevice(value string) (*USBDevice, error) {
 	device := USBDevice{}
 	fields := strings.Split(value, " ")
-	//log.Printf("fields=%+v\n", fields)
+	log.Printf("fields=%+v\n", fields)
 	for _, field := range fields {
 		vidMatch := VID_PATTERN.FindStringSubmatch(field)
 		pidMatch := PID_PATTERN.FindStringSubmatch(field)
-		autocleanMatch := AUTOCLEAN_PATTERN.FindStringSubmatch(field)
 		vidPidMatch := VIDPID_PATTERN.FindStringSubmatch(field)
-		vidOnlyMatch := VIDONLY_PATTERN.FindStringSubmatch(field)
+		autocleanMatch := AUTOCLEAN_PATTERN.FindStringSubmatch(field)
 		if len(vidMatch) > 1 {
+			log.Printf("VIDMATCH: %v\n", vidMatch)
 			device.VID = vidMatch[len(vidMatch)-1]
 		} else if len(pidMatch) > 1 {
+			log.Printf("PIDMATCH: %v\n", pidMatch)
 			device.PID = pidMatch[len(pidMatch)-1]
 		} else if len(vidPidMatch) > 2 {
+			log.Printf("VIDPIDMATCH: %v\n", vidPidMatch)
 			device.VID = vidPidMatch[1]
 			device.PID = vidPidMatch[2]
-		} else if len(vidOnlyMatch) > 1 {
-			device.VID = vidOnlyMatch[1]
 		} else if len(autocleanMatch) > 1 {
 			switch strings.ToLower(autocleanMatch[len(autocleanMatch)-1]) {
-			case "0", "false":
+			case "", "0", "false":
 				device.Autoclean = false
-			case "", "1", "true":
+			case "1", "true":
 				device.Autoclean = true
 			default:
 				return nil, Fatalf("unexpected autoclean value '%s' in USB config '%s'", field, value)
