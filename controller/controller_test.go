@@ -53,6 +53,7 @@ func TestControllerParseUSB(t *testing.T) {
 	require.Equal(t, "vid:0x1234 autoclean:0", device.String())
 	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 0))
 	log.Printf("%s\n", device.FormatQuirksLine(0))
+	log.Printf("string: %s\n", device.String())
 
 	device, err = ParseUSBDevice("1234:abcd")
 	require.Nil(t, err)
@@ -60,13 +61,23 @@ func TestControllerParseUSB(t *testing.T) {
 	require.Equal(t, "vid:0x1234 pid:0xabcd autoclean:0", device.String())
 	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 1))
 	log.Printf("%s\n", device.FormatQuirksLine(1))
+	log.Printf("string: %s\n", device.String())
+
+	device, err = ParseUSBDevice("vid:0x1234 autoclean:0")
+	require.Nil(t, err)
+	require.Equal(t, USBDevice{VID: "1234", PID: "", Autoclean: false}, *device)
+	require.Equal(t, "vid:0x1234 autoclean:0", device.String())
+	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 2))
+	log.Printf("%s\n", device.FormatQuirksLine(2))
+	log.Printf("string: %s\n", device.String())
 
 	device, err = ParseUSBDevice("baad-f00d autoclean:1")
 	require.Nil(t, err)
 	require.Equal(t, USBDevice{VID: "baad", PID: "f00d", Autoclean: true}, *device)
 	require.Equal(t, "vid:0xbaad pid:0xf00d autoclean:1", device.String())
-	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 2))
-	log.Printf("%s\n", device.FormatQuirksLine(2))
+	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 3))
+	log.Printf("%s\n", device.FormatQuirksLine(3))
+	log.Printf("string: %s\n", device.String())
 }
 
 func TestControllerRegex(t *testing.T) {
