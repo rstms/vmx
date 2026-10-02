@@ -619,13 +619,11 @@ func (v *VMX) SetUSB(options *CreateOptions) (string, error) {
 	case 2:
 		v.addLine(`usb.present = "TRUE"`)
 		action += "2.0"
-		break
 	case 3:
 		action += "3.2"
 		v.addLine(`usb.present = "TRUE"`)
 		v.addLine(`usb_xhci.present = "TRUE"`)
 		prefix = "usb_xhci"
-		break
 	default:
 		return "", Fatalf("unexpected USB version: %d", options.USBVersion)
 	}
