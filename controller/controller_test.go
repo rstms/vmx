@@ -42,3 +42,29 @@ func TestControllerList(t *testing.T) {
 		fmt.Printf("%d %s\n", i, line)
 	}
 }
+
+func TestControllerParseUSB(t *testing.T) {
+	initTestConfig(t)
+	ViperSet("verbose", true)
+
+	device, err := ParseUSBDevice("0x1234")
+	require.Nil(t, err)
+	require.Equal(t, USBDevice{VID: "1234", PID: "", Autoclean: false}, *device)
+	require.Equal(t, "vid:0x1234 autoclean:0", device.String())
+	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 0))
+	log.Printf("%s\n", device.FormatQuirksLine(0))
+
+	device, err = ParseUSBDevice("1234:abcd")
+	require.Nil(t, err)
+	require.Equal(t, USBDevice{VID: "1234", PID: "abcd", Autoclean: false}, *device)
+	require.Equal(t, "vid:0x1234 pid:0xabcd autoclean:0", device.String())
+	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 1))
+	log.Printf("%s\n", device.FormatQuirksLine(1))
+
+	device, err = ParseUSBDevice("baad-f00d autoclean:1")
+	require.Nil(t, err)
+	require.Equal(t, USBDevice{VID: "baad", PID: "f00d", Autoclean: true}, *device)
+	require.Equal(t, "vid:0xbaad pid:0xf00d autoclean:1", device.String())
+	log.Printf("%s\n", device.FormatAutoconnectLine("usb", 2))
+	log.Printf("%s\n", device.FormatQuirksLine(2))
+}
