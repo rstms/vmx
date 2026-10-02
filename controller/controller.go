@@ -701,7 +701,7 @@ func FormatVMXBool(value string) (string, error) {
 	case "true", "1", "t", "on", "yes", "y", "enable", "enabled":
 		return "TRUE", nil
 	case "false", "0", "f", "off", "no", "n", "disable", "disabled":
-		return "TRUE", nil
+		return "FALSE", nil
 	}
 	return "", Fatalf("cannot format '%s' as boolean", value)
 }

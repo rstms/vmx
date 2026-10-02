@@ -44,6 +44,9 @@ func (v *vmctl) Modify(vid string, options CreateOptions, isoOptions IsoOptions)
 	}
 
 	actions, err := vmx.Configure(&options, &isoOptions)
+	if err != nil {
+		return nil, Fatal(err)
+	}
 
 	editedData, err := vmx.Read()
 	if err != nil {

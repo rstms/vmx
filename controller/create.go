@@ -97,6 +97,8 @@ func NewCreateOptions() *CreateOptions {
 		ModifyClipboard: true,
 		ModifyFloppy:    true,
 		VNCPort:         5900,
+		ModifyUSB:       true,
+		USBVersion:      0,
 	}
 }
 
