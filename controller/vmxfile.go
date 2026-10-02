@@ -12,12 +12,11 @@ var MAC_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$`)
 var ISO_FILENAME_PATTERN = regexp.MustCompile(`^ide1:0\.fileName = "([^"]*)"`)
 var ISO_PRESENT_PATTERN = regexp.MustCompile(`^ide1:0\.present = "([^"]*)"`)
 
+var HEX_4_PATTERN = regexp.MustCompile(`^([[:xdigit:]]{4})$`)
 var VID_PATTERN = regexp.MustCompile(`^(?:vid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
 var PID_PATTERN = regexp.MustCompile(`^(?:pid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
 var VIDPID_PATTERN = regexp.MustCompile(`^(?:vid[:-])*(?:0x)*([[:xdigit:]]{4})[:-]*(?:pid[:-])*(?:0x)*([[:xdigit:]]{4})$`)
-
 var AUTOCLEAN_PATTERN = regexp.MustCompile(`^autoclean[:-]([01])$`)
-var HEX4_PATTERN = regexp.MustCompile(`^[[:xdigit:]]{4}$`)
 
 const USB_DEVICE_COUNT = 4
 
@@ -688,11 +687,20 @@ func ParseUSBDevice(value string) (*USBDevice, error) {
 		if field == "autoclean" {
 			field = "autoclean:1"
 		}
+		hexMatch := HEX_4_PATTERN.FindStringSubmatch(field)
 		vidMatch := VID_PATTERN.FindStringSubmatch(field)
 		pidMatch := PID_PATTERN.FindStringSubmatch(field)
 		vidPidMatch := VIDPID_PATTERN.FindStringSubmatch(field)
 		autocleanMatch := AUTOCLEAN_PATTERN.FindStringSubmatch(field)
-		if len(vidMatch) > 1 {
+		if len(hexMatch) > 1 {
+			if device.VID == "" {
+				device.VID = hexMatch[len(hexMatch)-1]
+			} else if device.PID == "" {
+				device.PID = hexMatch[len(hexMatch)-1]
+			} else {
+				return nil, Fatalf("unexpected device value '%s' in USB config '%s'", field, value)
+			}
+		} else if len(vidMatch) > 1 {
 			log.Printf("VIDMATCH: %v\n", vidMatch)
 			device.VID = vidMatch[len(vidMatch)-1]
 		} else if len(pidMatch) > 1 {
@@ -716,11 +724,11 @@ func ParseUSBDevice(value string) (*USBDevice, error) {
 		}
 	}
 
-	if !HEX4_PATTERN.MatchString(device.VID) {
+	if !HEX_4_PATTERN.MatchString(device.VID) {
 		return nil, Fatalf("invalid VID in USB config '%s'", value)
 	}
 	if device.PID != "" {
-		if !HEX4_PATTERN.MatchString(device.PID) {
+		if !HEX_4_PATTERN.MatchString(device.PID) {
 			return nil, Fatalf("invalid PID in USB config '%s'", value)
 		}
 	}
