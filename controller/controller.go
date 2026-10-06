@@ -42,6 +42,12 @@ type VMFile struct {
 	Length uint64 `json:"length,omitzero"`
 }
 
+type VMHostState struct {
+	Hostname   string
+	OS         string
+	Resolution []int
+}
+
 type VM struct {
 	Id   string
 	Path string
@@ -104,6 +110,7 @@ type Controller interface {
 	SendKeys(string, string) error
 	Close() error
 	GetState(string) (*VMState, error)
+	HostState() (*VMHostState, error)
 }
 
 type vmctl struct {
@@ -845,4 +852,18 @@ func checkEncryptedError(vm *VM, err error) bool {
 		return true
 	}
 	return false
+}
+
+// return host data
+func (v *vmctl) HostState() (*VMHostState, error) {
+	x, y, err := v.HostResolution()
+	if err != nil {
+		return nil, Fatal(err)
+	}
+	host := VMHostState{
+		Hostname:   v.Hostname,
+		OS:         v.Remote,
+		Resolution: []int{x, y},
+	}
+	return &host, nil
 }

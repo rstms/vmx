@@ -84,3 +84,14 @@ func TestControllerRegex(t *testing.T) {
 	match := VID_PATTERN.FindStringSubmatch("0xabcd")
 	require.Equal(t, 2, len(match))
 }
+
+func TestControllerHostInfo(t *testing.T) {
+	initTestConfig(t)
+	ViperSet("verbose", true)
+	vmx, err := NewVMXController()
+	require.Nil(t, err)
+	fmt.Printf("vmx: %s\n", FormatJSON(vmx))
+	state, err := vmx.HostState()
+	require.Nil(t, err)
+	fmt.Printf("stat: %s\n", FormatJSON(state))
+}
