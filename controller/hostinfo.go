@@ -3,8 +3,6 @@ package controller
 // functions to query host info
 
 import (
-	"fmt"
-
 	"encoding/json"
 	"strings"
 )
@@ -27,7 +25,7 @@ func (v *vmctl) HostResolution() (int, int, error) {
 		if err != nil {
 			return 0, 0, Fatal(err)
 		}
-		fmt.Printf("resolution: %s\n", FormatJSON(result))
+		//fmt.Printf("resolution: %s\n", FormatJSON(result))
 		return result.CurrentHorizontalResolution, result.CurrentVerticalResolution, nil
 	}
 	return 0, 0, Fatalf("Host OS %s does not support resolution query", v.Remote)
